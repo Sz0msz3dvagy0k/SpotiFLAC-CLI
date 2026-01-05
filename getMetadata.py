@@ -1,93 +1,33 @@
 from time import sleep
 from urllib.parse import urlparse, parse_qs
-from pathlib import Path
 import requests
 import json
-import time
-import pyotp
 import base64
 from random import randrange
 from typing import Dict, Any, List, Tuple
 
 
-# https://github.com/visagenull/Spotify-Free
 def get_random_user_agent():
     return f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_{randrange(11, 15)}_{randrange(4, 9)}) AppleWebKit/{randrange(530, 537)}.{randrange(30, 37)} (KHTML, like Gecko) Chrome/{randrange(80, 105)}.0.{randrange(3000, 4500)}.{randrange(60, 125)} Safari/{randrange(530, 537)}.{randrange(30, 36)}"
 
-# https://github.com/xyloflake/spot-secrets-go
-def generate_totp():
-    local_path = Path.home() / ".spotify-secret" / "secretBytes.json"
-    used_local = False
 
-    try:
-        url = "https://raw.githubusercontent.com/afkarxyz/secretBytes/refs/heads/main/secrets/secretBytes.json"
-        resp = requests.get(url, timeout=10)
-        if resp.status_code != 200:
-            raise Exception(f"GitHub fetch failed with status: {resp.status_code}")
-        secrets_list = resp.json()
-    except Exception as github_error:
-        try:
-            if local_path.exists():
-                with open(local_path, 'r') as f:
-                    secrets_list = json.load(f)
-                used_local = True
-            else:
-                raise Exception(f"GitHub failed ({github_error}) and no local file found at {local_path}")
-        except Exception as local_error:
-            raise Exception(f"Failed to fetch secrets from both GitHub and local: {local_error}")
+CLIENT_ID = base64.b64decode("NWY1NzNjOTYyMDQ5NGJhZTg3ODkwYzBmMDhhNjAyOTM=").decode('utf-8')
+CLIENT_SECRET = base64.b64decode("MjEyNDc2ZDliMGYzNDcyZWFhNzYyZDkwYjE5YjBiYTg=").decode('utf-8')
 
-    try:
-        latest_entry = max(secrets_list, key=lambda x: x["version"])
-        version = latest_entry["version"]
-        secret_cipher = latest_entry["secret"]
-    except Exception as e:
-        raise Exception(f"Failed to process secrets: {str(e)}")
-
-    processed = [byte ^ ((i % 33) + 9) for i, byte in enumerate(secret_cipher)]
-    processed_str = "".join(map(str, processed))
-    utf8_bytes = processed_str.encode('utf-8')
-    hex_str = utf8_bytes.hex()
-    secret_bytes = bytes.fromhex(hex_str)
-    b32_secret = base64.b32encode(secret_bytes).decode('utf-8')
-    totp = pyotp.TOTP(b32_secret)
-
-    headers = {
-        "Host": "open.spotify.com",
-        "User-Agent": get_random_user_agent(),
-        "Accept": "*/*",
-    }
-
-    try:
-        resp = requests.get("https://open.spotify.com/api/server-time", headers=headers, timeout=10)
-        if resp.status_code != 200:
-            raise Exception(f"Failed to get server time. Status code: {resp.status_code}")
-        data = resp.json()
-        server_time = data.get("serverTime")
-        if server_time is None:
-            raise Exception("Failed to fetch server time from Spotify")
-        return totp, server_time, version
-    except Exception as e:
-        raise Exception(f"Error getting server time: {str(e)}")
-
-
-token_url = 'https://open.spotify.com/api/token'
+token_url = 'https://accounts.spotify.com/api/token'
 playlist_base_url = 'https://api.spotify.com/v1/playlists/{}'
 album_base_url = 'https://api.spotify.com/v1/albums/{}'
 track_base_url = 'https://api.spotify.com/v1/tracks/{}'
 artist_base_url = 'https://api.spotify.com/v1/artists/{}'
 artist_albums_url = 'https://api.spotify.com/v1/artists/{}/albums'
+
 headers = {
     'User-Agent': get_random_user_agent(),
     'Accept': 'application/json',
     'Accept-Language': 'en-US,en;q=0.9',
     'Accept-Encoding': 'gzip, deflate, br',
-    'sec-ch-ua-platform': '"Windows"',
-    'sec-fetch-dest': 'empty',
-    'sec-fetch-mode': 'cors',
-    'sec-fetch-site': 'same-origin',
-    'Referer': 'https://open.spotify.com/',
-    'Origin': 'https://open.spotify.com'
 }
+
 
 class SpotifyInvalidUrlException(Exception):
     pass
@@ -114,12 +54,10 @@ def parse_uri(uri):
         if u.netloc != "open.spotify.com" and u.netloc != "play.spotify.com":
             raise SpotifyInvalidUrlException("ERROR: url {} is not supported".format(uri))
         parts = u.path.split("/")
-
-    if parts[1] == "embed":
-        parts = parts[1:]
-
-    if len(parts) > 1 and parts[1].startswith("intl-"):
-        parts = parts[1:]
+        if parts[1] == "embed":
+            parts = parts[1:]
+        if len(parts) > 1 and parts[1].startswith("intl-"):
+            parts = parts[1:]
 
     l = len(parts)
     if l == 3 and parts[1] in ["album", "track", "playlist", "artist"]:
@@ -139,9 +77,10 @@ def parse_uri(uri):
 
 
 def get_json_from_api(api_url, access_token):
-    headers.update({'Authorization': 'Bearer {}'.format(access_token)})
+    request_headers = headers.copy()
+    request_headers['Authorization'] = f'Bearer {access_token}'
 
-    req = requests.get(api_url, headers=headers, timeout=10)
+    req = requests.get(api_url, headers=request_headers, timeout=10)
 
     if req.status_code == 429:
         seconds = int(req.headers.get("Retry-After", "5")) + 1
@@ -157,26 +96,31 @@ def get_json_from_api(api_url, access_token):
 
 def get_access_token():
     try:
-        totp, server_time, totp_version = generate_totp()
-        otp_code = totp.at(int(server_time))
-        timestamp_ms = int(time.time() * 1000)
+        auth_str = f"{CLIENT_ID}:{CLIENT_SECRET}"
+        auth_bytes = auth_str.encode('utf-8')
+        auth_b64 = base64.b64encode(auth_bytes).decode('utf-8')
 
-        params = {
-            'reason': 'init',
-            'productType': 'web-player',
-            'totp': otp_code,
-            'totpServerTime': server_time,
-            'totpVer': str(totp_version),
-            'sTime': server_time,
-            'cTime': timestamp_ms,
-            'buildVer': 'web-player_2025-07-02_1720000000000_12345678',
-            'buildDate': '2025-07-02'
+        token_headers = {
+            'Authorization': f'Basic {auth_b64}',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': get_random_user_agent()
         }
 
-        req = requests.get(token_url, headers=headers, params=params, timeout=10)
+        token_data = {
+            'grant_type': 'client_credentials'
+        }
+
+        req = requests.post(token_url, headers=token_headers, data=token_data, timeout=10)
+
         if req.status_code != 200:
+            print(f"Token request failed: {req.status_code}")
+            print(f"Response: {req.text}")
             return {"error": f"Failed to get access token. Status code: {req.status_code}"}
-        return req.json()
+
+        response = req.json()
+        print(response.get("access_token"))
+        return {"accessToken": response.get("access_token")}
+
     except Exception as e:
         return {"error": f"Failed to get access token: {str(e)}"}
 
@@ -188,7 +132,6 @@ def fetch_tracks_in_batches(url: str, access_token: str, batch_size: int = 100, 
 
     while url:
         print(f"Batch : {current_batch}")
-
         url_parts = url.split("offset=")
         if len(url_parts) > 1:
             offset_part = url_parts[1].split("&")[0]
@@ -201,8 +144,8 @@ def fetch_tracks_in_batches(url: str, access_token: str, batch_size: int = 100, 
 
         items = track_data.get('items', [])
         all_tracks.extend(items)
-
         url = track_data.get('next')
+
         if url and "&locale=" in url:
             url = url.split("&locale=")[0]
 
@@ -246,30 +189,22 @@ def get_raw_spotify_data(spotify_url, batch: bool = False, delay: float = 1.0):
                 if len(tracks) < total_tracks:
                     last_offset = len(tracks)
                     remaining_tracks = []
-
                     while last_offset < total_tracks:
                         print(f"Batch : {num_batches}")
                         print(f"Offset : {last_offset}")
                         print("-------------")
-
                         remainder_url = f'https://api.spotify.com/v1/playlists/{url_info["id"]}/tracks?offset={last_offset}&limit=100'
                         track_data = get_json_from_api(remainder_url, access_token)
-
                         if not track_data or not track_data.get('items'):
                             break
-
                         items = track_data.get('items', [])
                         remaining_tracks.extend(items)
-
                         if len(items) < 100:
                             break
-
                         last_offset += len(items)
                         num_batches += 1
-
                         if delay > 0:
                             sleep(delay)
-
                     tracks.extend(remaining_tracks)
                     raw_data['tracks']['items'] = tracks
                     raw_data['_batch_count'] = num_batches
@@ -280,15 +215,12 @@ def get_raw_spotify_data(spotify_url, batch: bool = False, delay: float = 1.0):
                     track_data = get_json_from_api(tracks_url, access_token)
                     if not track_data:
                         break
-
                     tracks.extend(track_data['items'])
                     tracks_url = track_data.get('next')
                     if tracks_url and "&locale=" in tracks_url:
                         tracks_url = tracks_url.split("&locale=")[0]
-
                 raw_data['tracks']['items'] = tracks
                 raw_data['_batch_enabled'] = False
-
         except Exception as e:
             return {"error": f"Failed to get playlist data: {str(e)}"}
 
@@ -315,30 +247,22 @@ def get_raw_spotify_data(spotify_url, batch: bool = False, delay: float = 1.0):
                 if len(tracks) < total_tracks:
                     last_offset = len(tracks)
                     remaining_tracks = []
-
                     while last_offset < total_tracks:
                         print(f"Batch : {num_batches}")
                         print(f"Offset : {last_offset}")
                         print("-------------")
-
                         remainder_url = f'{album_base_url.format(url_info["id"])}/tracks?offset={last_offset}&limit=50'
                         track_data = get_json_from_api(remainder_url, access_token)
-
                         if not track_data or not track_data.get('items'):
                             break
-
                         items = track_data.get('items', [])
                         remaining_tracks.extend(items)
-
                         if len(items) < 50:
                             break
-
                         last_offset += len(items)
                         num_batches += 1
-
                         if delay > 0:
                             sleep(delay)
-
                     tracks.extend(remaining_tracks)
                     raw_data['tracks']['items'] = tracks
                     raw_data['_batch_count'] = num_batches
@@ -349,15 +273,12 @@ def get_raw_spotify_data(spotify_url, batch: bool = False, delay: float = 1.0):
                     track_data = get_json_from_api(tracks_url, access_token)
                     if not track_data:
                         break
-
                     tracks.extend(track_data['items'])
                     tracks_url = track_data.get('next')
                     if tracks_url and "&locale=" in tracks_url:
                         tracks_url = tracks_url.split("&locale=")[0]
-
                 raw_data['tracks']['items'] = tracks
                 raw_data['_batch_enabled'] = False
-
         except Exception as e:
             return {"error": f"Failed to get album data: {str(e)}"}
 
@@ -369,7 +290,6 @@ def get_raw_spotify_data(spotify_url, batch: bool = False, delay: float = 1.0):
             )
             if not track_data:
                 return {"error": "Failed to get track data"}
-
             raw_data = track_data
         except Exception as e:
             return {"error": f"Failed to get track data: {str(e)}"}
@@ -387,7 +307,6 @@ def format_track_data(track_data):
 
     image_url = track_data.get('album', {}).get('images', [{}])[0].get('url', '') if track_data.get('album', {}).get(
         'images') else ''
-
     isrc = track_data.get('external_ids', {}).get('isrc', '')
 
     return {
@@ -414,8 +333,8 @@ def format_album_data(album_data):
             artists.append(artist['name'])
 
     image_url = album_data.get('images', [{}])[0].get('url', '') if album_data.get('images') else ''
-
     track_list = []
+
     for track in album_data.get('tracks', {}).get('items', []):
         track_artists = []
         for artist in track.get('artists', []):
@@ -426,7 +345,6 @@ def format_album_data(album_data):
 
         track_id = track.get('id', '')
         track_isrc = ''
-
         if track_id and album_data.get('_token'):
             try:
                 full_track_data = get_json_from_api(
@@ -469,10 +387,9 @@ def format_album_data(album_data):
 
 def format_playlist_data(playlist_data):
     image_url = playlist_data.get('images', [{}])[0].get('url', '') if playlist_data.get('images') else ''
-
     track_list = []
-    for item in playlist_data.get('tracks', {}).get('items', []):
 
+    for item in playlist_data.get('tracks', {}).get('items', []):
         track = item.get('track', {})
         if not track:
             continue
@@ -554,11 +471,14 @@ if __name__ == '__main__':
     album = "https://open.spotify.com/album/6J84szYCnMfzEcvIcfWMFL"
     song = "https://open.spotify.com/track/7so0lgd0zP2Sbgs2d7a1SZ"
 
+    print("Fetching playlist...")
     filtered_playlist = get_filtered_data(playlist, batch=True, delay=0.1)
     print(json.dumps(filtered_playlist, indent=2))
 
+    print("\nFetching album...")
     filtered_album = get_filtered_data(album)
     print(json.dumps(filtered_album, indent=2))
 
+    print("\nFetching track...")
     filtered_track = get_filtered_data(song)
     print(json.dumps(filtered_track, indent=2))
