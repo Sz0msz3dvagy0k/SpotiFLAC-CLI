@@ -1,4 +1,4 @@
-<h1>Command Line Interface version of SpotiFLAC.</h1>
+<h1>Module python version of SpotiFLAC.</h1>
 <h2>Arguments</h2>
 <i>service {tidal,qobuz,deezer,amazon}</i><br>
 Specify the music service to use for downloading FLAC files. Specify multiple services separated by spaces to try them in order. Default is 'tidal'.<br><br>
