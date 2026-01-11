@@ -27,6 +27,15 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Debug - List files
+      run: |
+        echo "=== Current directory ==="
+        pwd
+        echo "=== Files in root ==="
+        ls -la
+        echo "=== Python files ==="
+        find . -name "*.py" -type f
+
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -69,7 +78,7 @@ jobs:
         draft: false
         prerelease: false
         body: |
-          ## Download for your platform:
+          ## Download for platforms:
           
           - **Windows**: SpotiFLAC-Windows.exe
           - **macOS**: SpotiFLAC-macOS (run `chmod +x SpotiFLAC-macOS` first)
