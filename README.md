@@ -14,30 +14,39 @@ Organize downloaded files into subfolders by album.<br><br>
 Specify the duration in minutes to keep retrying downloads in case of failures. Default is 0 (no retries).<br>
 
 
-<h3>Usage</h3>
+<h3>Usage (as Module)</h3>
 
 ```bash
-python SpotiFLAC.py [--service {tidal,deezer}]
-                    [--filename-format {title_artist,artist_title,title_only}]
-                    [--use-track-numbers]
-                    [--use-artist-subfolders]
-                    [--use-album-subfolders]
-                    [--loop minutes]
-                    url 
-                    output_dir
+from spotiFLAC import spotiflac
+
+spotiflac(
+    url,
+    output_dir,
+    services=["tidal", "deezer", "qobuz", "amazon"],
+    filename_format="title_artist",
+    use_track_numbers=False,
+    use_artist_subfolders=False,
+    use_album_subfolders=False,
+    loop=None
+)
 ```
 
-<h3>Example</h3>
+<h3>Example (Module Usage)</h3>
 
 ```bash
-python SpotiFLAC.py --service tidal deezer
-                    --filename-format artist_title 
-                    --use-track-numbers 
-                    --use-artist-subfolders 
-                    --use-album-subfolders 
-                    --loop 120
-                    https://open.spotify.com/album/xyz 
-                    /path/to/output_dir
+from spotiFLAC import spotiflac
+
+spotiflac(
+    url="https://open.spotify.com/album/xyz",
+    output_dir="/path/to/output_dir",
+    services=["tidal", "deezer"],
+    filename_format="artist_title",
+    use_track_numbers=True,
+    use_artist_subfolders=True,
+    use_album_subfolders=True,
+    loop=120
+)
+
 ```
 
 <h2>Installation</h2>
