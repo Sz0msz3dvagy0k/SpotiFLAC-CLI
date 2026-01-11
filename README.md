@@ -1,49 +1,50 @@
-<h1>Command Line Interface version of SpotiFLAC.</h1>
+<h1>Module python version of SpotiFLAC.</h1>
 <h2>Arguments</h2>
-<i>--service {tidal,qobuz,deezer,amazon}</i><br>
+<i>service {tidal,qobuz,deezer,amazon}</i><br>
 Specify the music service to use for downloading FLAC files. Specify multiple services separated by spaces to try them in order. Default is 'tidal'.<br><br>
-<i>--filename-format {title_artist,artist_title,title_only}</i><br>
+<i>filename-format {title_artist,artist_title,title_only}</i><br>
 Specify the format for naming downloaded files. Default is 'title_artist'.<br><br>
-<i>--use-track-numbers</i><br>
+<i>use-track-numbers</i><br>
 Include track numbers in the filenames.<br><br>
-<i>--use-artist-subfolders</i><br>
+<i>use-artist-subfolders</i><br>
 Organize downloaded files into subfolders by artist.<br><br>
-<i>--use-album-subfolders</i><br>
+<i>use-album-subfolders</i><br>
 Organize downloaded files into subfolders by album.<br><br>
-<i>--loop minutes</i><br>
+<i>loop minutes</i><br>
 Specify the duration in minutes to keep retrying downloads in case of failures. Default is 0 (no retries).<br>
 
 
-<h3>Usage</h3>
+<h3>Usage (as Module)</h3>
 
 ```bash
-python SpotiFLAC.py [--service {tidal,deezer}]
-                    [--filename-format {title_artist,artist_title,title_only}]
-                    [--use-track-numbers]
-                    [--use-artist-subfolders]
-                    [--use-album-subfolders]
-                    [--loop minutes]
-                    url 
-                    output_dir
+from spotiFLAC import spotiflac
+
+spotiflac(
+    url,
+    output_dir,
+    services=["tidal", "deezer", "qobuz", "amazon"],
+    filename_format="title_artist",
+    use_track_numbers=False,
+    use_artist_subfolders=False,
+    use_album_subfolders=False,
+    loop=None
+)
 ```
 
-<h3>Example</h3>
+<h3>Example (Module Usage)</h3>
 
 ```bash
-python SpotiFLAC.py --service tidal deezer
-                    --filename-format artist_title 
-                    --use-track-numbers 
-                    --use-artist-subfolders 
-                    --use-album-subfolders 
-                    --loop 120
-                    https://open.spotify.com/album/xyz 
-                    /path/to/output_dir
-```
+from spotiFLAC import spotiflac
 
-<h2>Installation</h2>
+spotiflac(
+    url="https://open.spotify.com/album/xyz",
+    output_dir="/path/to/output_dir",
+    services=["tidal", "deezer"],
+    filename_format="artist_title",
+    use_track_numbers=True,
+    use_artist_subfolders=True,
+    use_album_subfolders=True,
+    loop=120
+)
 
-To install the required dependencies, run the following command:
-
-```bash
-pip install -r requirements.txt
 ```

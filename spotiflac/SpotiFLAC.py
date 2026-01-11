@@ -5,11 +5,11 @@ import argparse
 import asyncio
 
 from dataclasses import dataclass
-from getMetadata import get_filtered_data, parse_uri, SpotifyInvalidUrlException
-from tidalDL import TidalDownloader
-from deezerDL import DeezerDownloader
-from qobuzDL import QobuzDownloader
-from amazonDL import AmazonDownloader
+from .getMetadata import get_filtered_data, parse_uri, SpotifyInvalidUrlException
+from .tidalDL import TidalDownloader
+from .deezerDL import DeezerDownloader
+from .qobuzDL import QobuzDownloader
+from .amazonDL import AmazonDownloader
 
 @dataclass
 class Config:
@@ -515,13 +515,32 @@ def parse_args():
     return parser.parse_args()
 
 
-if __name__ == '__main__':
-    args = parse_args()
-    config = Config(**vars(args))
+def spotiflac(
+    url: str,
+    output_dir: str,
+    services=["tidal", "deezer", "qobuz", "amazon"],
+    filename_format="title_artist",
+    use_track_numbers=False,
+    use_artist_subfolders=False,
+    use_album_subfolders=False,
+    loop=None
+):
+
+    global config
+    config = Config(
+        url=url,
+        output_dir=output_dir,
+        service=services,
+        filename_format=filename_format,
+        use_track_numbers=use_track_numbers,
+        use_artist_subfolders=use_artist_subfolders,
+        use_album_subfolders=use_album_subfolders,
+        loop=loop
+    )
 
     try:
         fetch_tracks(config.url)
         download_tracks(range(len(config.tracks)))
-
     except KeyboardInterrupt:
-        print("\nDownload stopped.")
+        print("\nDownload stopped by user.")
+
