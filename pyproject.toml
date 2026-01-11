@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "SpotiFLAC"
-version = "0.1.0"
+version = "0.1.1"
 description = "Downloader module wrapper for SpotiFLAC"
 authors = [
   { name="ShuKurenais", email="shukurenais@proton.me" }
