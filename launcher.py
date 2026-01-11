@@ -2,7 +2,7 @@
 """
 Launcher script for SpotiFLAC
 """
-
+import argparse
 import sys
 import os
 
@@ -13,9 +13,27 @@ else:
 
 sys.path.insert(0, application_path)
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("url", help="Spotify URL")
+    parser.add_argument("output_dir", help="Output directory")
+    parser.add_argument(
+        "--service",
+        choices=["tidal", "deezer", "qobuz", "amazon"],
+        nargs="+",
+        default=["tidal"],
+        help="One or more services to try in order (e.g. --service tidal deezer qobuz amazon)",
+    )
+    parser.add_argument("--filename-format", choices=["title_artist","artist_title","title_only"], default="title_artist")
+    parser.add_argument("--use-track-numbers", action="store_true")
+    parser.add_argument("--use-artist-subfolders", action="store_true")
+    parser.add_argument("--use-album-subfolders", action="store_true")
+    parser.add_argument("--loop", type=int, help="Loop delay in minutes")
+    return parser.parse_args()
+
 # Now import and run the main SpotiFLAC module
 if __name__ == '__main__':
     from spotiflac import spotiflac
-    from spotiflac import SpotiFLAC
-    args = SpotiFLAC.parse_args()
-    spotiflac(args.url, args.output_dir, args.services)
+
+    args = parse_args()
+    spotiflac(args.url, args.output_dir, args.service, args.filename_format, args.use_track_numbers, args.use_artist_subfolders, args.use_album_subfolders, args.loop)
