@@ -52,19 +52,20 @@ jobs:
     - name: Build executable
       shell: bash
       run: |
-        cd spotiflac
         pyinstaller --onefile \
           --name "${{ matrix.build_name }}" \
           --console \
-          --hidden-import=amazonDL \
-          --hidden-import=deezerDL \
-          --hidden-import=getMetadata \
-          --hidden-import=qobuzDL \
-          --hidden-import=tidalDL \
+          --hidden-import=spotiflac.SpotiFLAC \
+          --hidden-import=spotiflac.tidalDL \
+          --hidden-import=spotiflac.deezerDL \
+          --hidden-import=spotiflac.qobuzDL \
+          --hidden-import=spotiflac.amazonDL \
+          --hidden-import=spotiflac.getMetadata \
           --hidden-import=certifi \
           --collect-data=certifi \
           --paths=spotiflac \
-          ../launcher.py
+          --add-data="spotiflac;spotiflac" \
+          launcher.py
 
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
