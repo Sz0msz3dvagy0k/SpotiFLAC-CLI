@@ -27,7 +27,7 @@ Program can also be ran by downloading the python files and calling <code>python
 ./SpotiFLAC-Windows.exe [url]
                         [output_dir]
                         [--service tidal qobuz deezer amazon]
-                        [--filename-format "title, artist, album, track_number, track, date, year, position, isrc, duration"]
+                        [--filename-format "{title}, {artist}, {album}, {track_number}, {track}, {date}, {year}, {position}, {isrc}, {duration}"]
                         [--use-track-numbers] [--use-artist-subfolders]
                         [--use-album-subfolders]
                         [--loop minutes]
@@ -39,7 +39,7 @@ Program can also be ran by downloading the python files and calling <code>python
 chmod +x SpotiFLAC-Linux
 ./SpotiFLAC-Linux [url]
                   [output_dir]
-                  [--filename-format {title_artist,artist_title,title_only}]
+                  [--filename-format "{title}, {artist}, {album}, {track_number}, {track}, {date}, {year}, {position}, {isrc}, {duration}"]
                   [--use-track-numbers] [--use-artist-subfolders]
                   [--use-album-subfolders]
                   [--loop minutes]
@@ -55,7 +55,7 @@ SpotiFLAC(
     url,
     output_dir,
     services=["tidal", "deezer", "qobuz", "amazon"],
-    filename_format="title_artist",
+    filename_format="{title}, {artist}",
     use_track_numbers=False,
     use_artist_subfolders=False,
     use_album_subfolders=False,
@@ -72,7 +72,7 @@ SpotiFLAC(
     url="https://open.spotify.com/album/xyz",
     output_dir="/path/to/output_dir",
     services=["tidal", "deezer"],
-    filename_format="artist_title",
+    filename_format="{title}, {artist}",
     use_track_numbers=True,
     use_artist_subfolders=True,
     use_album_subfolders=True,
