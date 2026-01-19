@@ -11,6 +11,11 @@ Organize downloaded files into subfolders by artist.<br><br>
 Organize downloaded files into subfolders by album.<br><br>
 <i>loop minutes</i><br>
 Specify the duration in minutes to keep retrying downloads in case of failures. Default is 0 (no retries).<br>
+<h3>Example usage:</h3>
+
+```bash
+python3 launcher.py "https://open.spotify.com/album/xyz" "/path/to/output_dir" --filename-format "[{year}] {album} - {track_number} {title}" --service qobuz --use-artist-subfolders --use-album-subfolders --loop 120
+```
 
 <h2>CLI usage</h2>
 <p>Program can be ran by downloading one of the release files.<br>
