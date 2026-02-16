@@ -502,6 +502,8 @@ def get_track_lyrics(track_id: str) -> str:
     
     except Exception as e:
         # Silently fail and return empty string
+        # Error is not logged to avoid cluttering output
+        # since lyrics are optional and many tracks won't have them
         return ""
 
 
