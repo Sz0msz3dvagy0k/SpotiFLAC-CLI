@@ -32,6 +32,8 @@ def parse_args():
     parser.add_argument("--use-artist-subfolders", action="store_true")
     parser.add_argument("--use-album-subfolders", action="store_true")
     parser.add_argument("--embed-lyrics", action="store_true", help="Embed lyrics into FLAC files")
+    parser.add_argument("--checkonly", action="store_true", help="Check if songs exist without downloading")
+    parser.add_argument("--createplaylist", action="store_true", help="Create M3U8 playlist file from album/playlist")
     parser.add_argument("--loop", type=int, help="Loop delay in minutes")
     return parser.parse_args()
 
@@ -39,4 +41,4 @@ if __name__ == '__main__':
     from SpotiFLAC.SpotiFLAC import SpotiFLAC
 
     args = parse_args()
-    SpotiFLAC(args.url, args.output_dir, args.service, args.filename_format, args.use_track_numbers, args.use_artist_subfolders, args.use_album_subfolders, args.embed_lyrics, args.loop)
+    SpotiFLAC(args.url, args.output_dir, args.service, args.filename_format, args.use_track_numbers, args.use_artist_subfolders, args.use_album_subfolders, args.embed_lyrics, args.checkonly, args.createplaylist, args.loop)
