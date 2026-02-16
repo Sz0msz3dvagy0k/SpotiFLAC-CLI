@@ -316,6 +316,37 @@ def format_custom_filename(template: str, track, position: int = 1) -> str:
     return result
 
 
+def detect_various_artists_album(tracks, album_name):
+    """
+    Detect if an album has multiple artists (compilation/various artists album).
+    Returns True if album should be placed in Various Artists folder.
+    
+    Args:
+        tracks: List of Track objects
+        album_name: Name of the album to check
+        
+    Returns:
+        bool: True if multiple artists detected for this album
+    """
+    if not tracks or not album_name:
+        return False
+    
+    # Get all tracks for this specific album
+    album_tracks = [t for t in tracks if t.album == album_name]
+    
+    if len(album_tracks) <= 1:
+        return False
+    
+    # Get unique artists, filtering out None, non-string, and empty/whitespace values
+    unique_artists = set(
+        stripped for t in album_tracks 
+        if isinstance(t.artists, str) and (stripped := t.artists.strip())
+    )
+    
+    # If more than one unique artist for this album, it's a various artists album
+    return len(unique_artists) > 1
+
+
 class DownloadWorker:
     def __init__(self, tracks, outpath, is_single_track=False, is_album=False, is_playlist=False,
                  album_or_playlist_name='', filename_format='{title} - {artist}', use_track_numbers=True,
@@ -335,6 +366,7 @@ class DownloadWorker:
         self.services = services
         self.embed_lyrics = embed_lyrics
         self.failed_tracks = []
+        self._various_artists_cache = {}
 
     def get_formatted_filename(self, track, position=1):
         if self.filename_format in ["title_artist", "artist_title", "title_only"]:
@@ -347,6 +379,23 @@ class DownloadWorker:
             return re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == '"' else '_', filename)
 
         return format_custom_filename(self.filename_format, track, position)
+
+    def get_sanitized_artist_folder(self, track):
+        """
+        Extract and sanitize the artist name for folder creation.
+        
+        Args:
+            track: Track object containing artist information
+            
+        Returns:
+            str: Sanitized folder name for the artist, or "Unknown Artist" if invalid
+        """
+        # Handle None or non-string artist values
+        if not track.artists or not isinstance(track.artists, str):
+            return "Unknown Artist"
+        
+        artist_name = track.artists.split(", ")[0] if ", " in track.artists else track.artists
+        return re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", artist_name)
 
     def run(self):
         try:
@@ -369,9 +418,16 @@ class DownloadWorker:
                 track_outpath = self.outpath
 
                 if self.use_artist_subfolders:
-                    artist_name = track.artists.split(", ")[0] if ", " in track.artists else track.artists
-                    artist_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_",
-                                           artist_name)
+                    if self.use_album_subfolders:
+                        if track.album not in self._various_artists_cache:
+                            self._various_artists_cache[track.album] = detect_various_artists_album(self.tracks, track.album)
+                        
+                        if self._various_artists_cache[track.album]:
+                            artist_folder = "Various Artists"
+                        else:
+                            artist_folder = self.get_sanitized_artist_folder(track)
+                    else:
+                        artist_folder = self.get_sanitized_artist_folder(track)
                     track_outpath = os.path.join(track_outpath, artist_folder)
 
                 if self.use_album_subfolders:
