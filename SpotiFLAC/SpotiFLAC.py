@@ -48,6 +48,136 @@ class Track:
     downloaded: bool = False
 
 
+def check_isrc_in_artist_dirs(base_dir: str, artist_name: str, isrc: str) -> tuple[str | None, str | None]:
+    """
+    Check if a file with the given ISRC exists in artist-related directories.
+    Uses a two-phase approach: quick filename check (handled by caller) then smart ISRC scan.
+    
+    Args:
+        base_dir: Root directory to search in
+        artist_name: Artist name from track metadata (e.g., "DJ Shadow, Cut Chemist")
+        isrc: ISRC code to match
+        
+    Returns:
+        Tuple of (full_path_to_file, directory_name) if found, or (None, None) if not found
+    """
+    if not isrc or not os.path.isdir(base_dir):
+        return None, None
+    
+    # Extract primary artist from string like "Artist1 feat. Artist2" or "Artist1, Artist2"
+    primary_artist = artist_name
+    for separator in [" feat. ", " ft. ", " featuring ", ", ", " & ", " and "]:
+        if separator in artist_name:
+            primary_artist = artist_name.split(separator)[0].strip()
+            break
+    
+    # Create regex pattern for matching artist directories
+    # Handle special characters and various naming conventions
+    artist_words = primary_artist.split()
+    if not artist_words:
+        # Fall back to checking root directory only
+        return _check_isrc_in_directory(base_dir, isrc)
+    
+    # Build pattern that matches directories containing all artist name words
+    # Example: "DJ Shadow" matches "DJ Shadow", "dj_shadow", "DJ-Shadow", etc.
+    pattern_parts = []
+    for word in artist_words:
+        # Escape special regex characters but allow word boundaries
+        escaped_word = re.escape(word)
+        pattern_parts.append(f"(?=.*{escaped_word})")
+    
+    # Combine into a single pattern (case-insensitive, matches all words in any order)
+    pattern = "".join(pattern_parts)
+    
+    try:
+        regex = re.compile(pattern, re.IGNORECASE)
+    except re.error:
+        # If regex compilation fails, fall back to simple check
+        return _check_isrc_in_directory(base_dir, isrc)
+    
+    directories_to_check = []
+    
+    # Check root directory first (for flat structures)
+    directories_to_check.append(base_dir)
+    
+    # Find matching artist directories (limit depth to 2 levels)
+    try:
+        for entry in os.listdir(base_dir):
+            entry_path = os.path.join(base_dir, entry)
+            if os.path.isdir(entry_path):
+                # Check if directory name matches artist pattern
+                if regex.search(entry):
+                    directories_to_check.append(entry_path)
+                    # Also check subdirectories (album folders, etc.) - level 2
+                    try:
+                        for subentry in os.listdir(entry_path):
+                            subentry_path = os.path.join(entry_path, subentry)
+                            if os.path.isdir(subentry_path):
+                                directories_to_check.append(subentry_path)
+                    except (OSError, PermissionError):
+                        continue
+        
+        # Also check common compilation folder names
+        compilation_folders = ["Various Artists", "Compilations", "VA", "Compilation"]
+        for folder in compilation_folders:
+            folder_path = os.path.join(base_dir, folder)
+            if os.path.isdir(folder_path):
+                directories_to_check.append(folder_path)
+                # Check album subfolders in compilation directories
+                try:
+                    for subentry in os.listdir(folder_path):
+                        subentry_path = os.path.join(folder_path, subentry)
+                        if os.path.isdir(subentry_path):
+                            directories_to_check.append(subentry_path)
+                except (OSError, PermissionError):
+                    continue
+    except (OSError, PermissionError):
+        pass
+    
+    # Check each directory for ISRC match
+    for directory in directories_to_check:
+        file_path, found = _check_isrc_in_directory(directory, isrc)
+        if found and file_path:
+            # Return the file path and the parent directory name for logging
+            parent_dir = os.path.basename(os.path.dirname(file_path))
+            if not parent_dir or parent_dir == os.path.basename(base_dir):
+                parent_dir = "root"
+            return file_path, parent_dir
+    
+    return None, None
+
+
+def _check_isrc_in_directory(directory: str, isrc: str) -> tuple[str | None, bool]:
+    """
+    Helper function to check for ISRC in a single directory.
+    
+    Args:
+        directory: Directory to scan for FLAC files
+        isrc: ISRC code to match
+        
+    Returns:
+        Tuple of (file_path, found) where found is True if ISRC matches
+    """
+    if not isrc or not os.path.isdir(directory):
+        return None, False
+    
+    try:
+        for entry in os.listdir(directory):
+            if not entry.lower().endswith(".flac"):
+                continue
+            path = os.path.join(directory, entry)
+            try:
+                audio = FLAC(path)
+                if "ISRC" in audio and audio["ISRC"] and audio["ISRC"][0] == isrc:
+                    return path, True
+            except Exception:
+                continue
+    except (OSError, PermissionError):
+        pass
+    
+    return None, False
+
+
 def get_metadata(url):
     try:
         metadata = get_filtered_data(url)
@@ -439,10 +569,25 @@ class DownloadWorker:
                 new_filename = self.get_formatted_filename(track, i + 1)
                 new_filepath = os.path.join(track_outpath, new_filename)
 
+                # Phase 1: Quick filename check
                 if os.path.exists(new_filepath) and os.path.getsize(new_filepath) > 0:
                     update_progress(f"File already exists: {new_filename}. Skipping download.")
                     track.downloaded = True
                     continue
+
+                # Phase 2: Smart ISRC scan in artist directories (only if Phase 1 fails)
+                if track.isrc:
+                    existing_file, found_dir = check_isrc_in_artist_dirs(
+                        base_dir=self.outpath,
+                        artist_name=track.artists,
+                        isrc=track.isrc
+                    )
+                    if existing_file:
+                        update_progress(
+                            f"File found by ISRC in {found_dir}: {os.path.basename(existing_file)}. Skipping download."
+                        )
+                        track.downloaded = True
+                        continue
 
                 download_success = False
                 last_error = None

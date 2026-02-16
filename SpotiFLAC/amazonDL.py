@@ -4,10 +4,11 @@ import os
 import random
 import re
 import time
-from typing import Callable, List, Optional
+from typing import Callable, List, Optional, Tuple
 from urllib.parse import quote
 
 import requests
+from mutagen.flac import FLAC
 
 
 def _sanitize_filename(value: str, fallback: str = "Unknown") -> str:
@@ -16,6 +17,114 @@ def _sanitize_filename(value: str, fallback: str = "Unknown") -> str:
     cleaned = re.sub(r'[\\/*?:"<>|]', "", value)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned or fallback
+
+
+def _check_isrc_exists(directory: str, isrc: str, artist_name: str = "") -> Tuple[Optional[str], bool]:
+    """
+    Check if a file with the given ISRC exists using artist-aware directory scanning.
+    
+    Args:
+        directory: Base directory to search in
+        isrc: ISRC code to match
+        artist_name: Artist name to narrow down search (optional)
+        
+    Returns:
+        Tuple of (file_path, found) where found is True if ISRC matches
+    """
+    if not isrc or not os.path.isdir(directory):
+        return None, False
+    
+    # If no artist name provided, fall back to checking the current directory only
+    if not artist_name:
+        return _check_isrc_in_single_directory(directory, isrc)
+    
+    # Extract primary artist
+    primary_artist = artist_name
+    for separator in [" feat. ", " ft. ", " featuring ", ", ", " & ", " and "]:
+        if separator in artist_name:
+            primary_artist = artist_name.split(separator)[0].strip()
+            break
+    
+    # Create regex pattern for matching artist directories
+    artist_words = primary_artist.split()
+    if not artist_words:
+        return _check_isrc_in_single_directory(directory, isrc)
+    
+    # Build pattern that matches directories containing all artist name words
+    pattern_parts = []
+    for word in artist_words:
+        escaped_word = re.escape(word)
+        pattern_parts.append(f"(?=.*{escaped_word})")
+    
+    pattern = "".join(pattern_parts)
+    
+    try:
+        regex = re.compile(pattern, re.IGNORECASE)
+    except re.error:
+        return _check_isrc_in_single_directory(directory, isrc)
+    
+    directories_to_check = [directory]
+    
+    # Find matching artist directories
+    try:
+        for entry in os.listdir(directory):
+            entry_path = os.path.join(directory, entry)
+            if os.path.isdir(entry_path):
+                if regex.search(entry):
+                    directories_to_check.append(entry_path)
+                    # Check subdirectories (album folders)
+                    try:
+                        for subentry in os.listdir(entry_path):
+                            subentry_path = os.path.join(entry_path, subentry)
+                            if os.path.isdir(subentry_path):
+                                directories_to_check.append(subentry_path)
+                    except (OSError, PermissionError):
+                        continue
+        
+        # Check compilation folders
+        for folder in ["Various Artists", "Compilations", "VA", "Compilation"]:
+            folder_path = os.path.join(directory, folder)
+            if os.path.isdir(folder_path):
+                directories_to_check.append(folder_path)
+                try:
+                    for subentry in os.listdir(folder_path):
+                        subentry_path = os.path.join(folder_path, subentry)
+                        if os.path.isdir(subentry_path):
+                            directories_to_check.append(subentry_path)
+                except (OSError, PermissionError):
+                    continue
+    except (OSError, PermissionError):
+        pass
+    
+    # Check each directory for ISRC match
+    for dir_to_check in directories_to_check:
+        file_path, found = _check_isrc_in_single_directory(dir_to_check, isrc)
+        if found and file_path:
+            return file_path, True
+    
+    return None, False
+
+
+def _check_isrc_in_single_directory(directory: str, isrc: str) -> Tuple[Optional[str], bool]:
+    """Helper to check ISRC in a single directory."""
+    if not isrc or not os.path.isdir(directory):
+        return None, False
+
+    try:
+        for entry in os.listdir(directory):
+            if not entry.lower().endswith(".flac"):
+                continue
+            path = os.path.join(directory, entry)
+            try:
+                audio = FLAC(path)
+                if "ISRC" in audio and audio["ISRC"] and audio["ISRC"][0] == isrc:
+                    return path, True
+            except Exception:
+                continue
+    except (OSError, PermissionError):
+        pass
+    
+    return None, False
 
 
 def _build_amazon_filename(
