@@ -61,7 +61,7 @@ echo ""
 # Install dependencies
 echo -e "${YELLOW}Installing Python dependencies...${NC}"
 python3 -m pip install --upgrade pip --quiet
-pip install pyinstaller certifi requests mutagen pyotp --quiet
+pip install pyinstaller certifi requests mutagen pyotp
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Dependencies installed successfully${NC}"
@@ -73,6 +73,11 @@ echo ""
 
 # Change to SpotiFLAC directory
 echo -e "${YELLOW}Building SpotiFLAC binary...${NC}"
+if [ ! -d "SpotiFLAC" ]; then
+    echo -e "${RED}Error: SpotiFLAC directory not found.${NC}"
+    echo -e "${RED}Make sure you're running this script from the repository root.${NC}"
+    exit 1
+fi
 cd SpotiFLAC
 
 # Run PyInstaller

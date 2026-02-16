@@ -80,7 +80,7 @@ pyinstaller --onefile --name SpotiFLAC-Linux --console ../launcher.py
 ### Step 4: Locate the Binary
 The compiled binary will be located at:
 ```
-SpotiFLAC/dist/SpotiFLAC-Linux
+SpotiFLAC/dist/SpotiFLAC-Linux  (or SpotiFLAC-Linux-x86_64 / SpotiFLAC-Linux-arm64 depending on your architecture)
 ```
 
 ## Platform-Specific Builds
