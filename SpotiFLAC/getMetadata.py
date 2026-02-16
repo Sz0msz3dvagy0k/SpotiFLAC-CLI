@@ -464,6 +464,49 @@ def get_filtered_data(spotify_url, batch=False, delay=1.0):
     return {"error": "Failed to get raw data"}
 
 
+def get_track_lyrics(track_id: str) -> str:
+    """
+    Fetch lyrics for a track from Spotify.
+    Returns empty string if lyrics not available.
+    """
+    try:
+        # Get access token
+        token = get_access_token()
+        if "error" in token:
+            return ""
+        
+        access_token = token["accessToken"]
+        
+        # Spotify's lyrics endpoint (used by the web player)
+        lyrics_url = f"https://spclient.wg.spotify.com/color-lyrics/v2/track/{track_id}"
+        
+        request_headers = headers.copy()
+        request_headers['Authorization'] = f'Bearer {access_token}'
+        request_headers['app-platform'] = 'WebPlayer'
+        
+        req = requests.get(lyrics_url, headers=request_headers, timeout=10)
+        
+        if req.status_code != 200:
+            # Lyrics not available or other error
+            return ""
+        
+        lyrics_data = req.json()
+        
+        # Extract lyrics lines from the response
+        if 'lyrics' in lyrics_data and 'lines' in lyrics_data['lyrics']:
+            lines = lyrics_data['lyrics']['lines']
+            lyrics_text = '\n'.join(line['words'] for line in lines if line.get('words'))
+            return lyrics_text
+        
+        return ""
+    
+    except Exception as e:
+        # Silently fail and return empty string
+        # Error is not logged to avoid cluttering output
+        # since lyrics are optional and many tracks won't have them
+        return ""
+
+
 if __name__ == '__main__':
     playlist = "https://open.spotify.com/playlist/37i9dQZEVXbNG2KDcFcKOF"
     album = "https://open.spotify.com/album/6J84szYCnMfzEcvIcfWMFL"
