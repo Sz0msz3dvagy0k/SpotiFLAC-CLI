@@ -389,15 +389,9 @@ def create_m3u8_playlist(worker, check_only=False):
                 if worker._various_artists_cache[track.album]:
                     artist_folder = "Various Artists"
                 else:
-                    artist_name = track.artists.split(", ")[0] if ", " in track.artists and track.artists else track.artists
-                    if not artist_name or not isinstance(artist_name, str):
-                        artist_name = "Unknown Artist"
-                    artist_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", artist_name)
+                    artist_folder = worker.get_sanitized_artist_folder(track)
             else:
-                artist_name = track.artists.split(", ")[0] if ", " in track.artists and track.artists else track.artists
-                if not artist_name or not isinstance(artist_name, str):
-                    artist_name = "Unknown Artist"
-                artist_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", artist_name)
+                artist_folder = worker.get_sanitized_artist_folder(track)
             track_outpath = os.path.join(track_outpath, artist_folder)
         
         if worker.use_album_subfolders:
