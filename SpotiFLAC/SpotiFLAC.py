@@ -338,7 +338,8 @@ def detect_various_artists_album(tracks, album_name):
         return False
     
     # Get unique artists for this album (normalize by stripping whitespace)
-    unique_artists = set(t.artists.strip() for t in album_tracks if t.artists)
+    # Filter out None values and non-string types to avoid AttributeError
+    unique_artists = set(t.artists.strip() for t in album_tracks if t.artists and isinstance(t.artists, str))
     
     # If more than one unique artist for this album, it's a various artists album
     return len(unique_artists) > 1
@@ -377,6 +378,11 @@ class DownloadWorker:
 
         return format_custom_filename(self.filename_format, track, position)
 
+    def get_sanitized_artist_folder(self, track):
+        """Extract and sanitize the artist name for folder creation."""
+        artist_name = track.artists.split(", ")[0] if ", " in track.artists else track.artists
+        return re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", artist_name)
+
     def run(self):
         try:
 
@@ -407,13 +413,9 @@ class DownloadWorker:
                         if self._various_artists_cache[track.album]:
                             artist_folder = "Various Artists"
                         else:
-                            artist_name = track.artists.split(", ")[0] if ", " in track.artists else track.artists
-                            artist_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_",
-                                                   artist_name)
+                            artist_folder = self.get_sanitized_artist_folder(track)
                     else:
-                        artist_name = track.artists.split(", ")[0] if ", " in track.artists else track.artists
-                        artist_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_",
-                                               artist_name)
+                        artist_folder = self.get_sanitized_artist_folder(track)
                     track_outpath = os.path.join(track_outpath, artist_folder)
 
                 if self.use_album_subfolders:
