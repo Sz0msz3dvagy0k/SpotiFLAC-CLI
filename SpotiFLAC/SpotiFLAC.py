@@ -48,6 +48,7 @@ class Track:
     isrc: str = ""
     release_date: str = ""
     downloaded: bool = False
+    file_path: str = ""  # Actual path to the downloaded/found file
 
 
 def check_isrc_in_artist_dirs(base_dir: str, artist_name: str, isrc: str) -> tuple[str | None, str | None]:
@@ -518,33 +519,42 @@ def create_m3u8_playlist(worker, check_only=False):
     missing_count = 0
     
     for i, track in enumerate(worker.tracks):
-        track_outpath = worker.outpath
-        
-        if worker.use_artist_subfolders:
-            if worker.use_album_subfolders:
-                if worker._various_artists_cache.get(track.album, False):
-                    artist_folder = "Various Artists"
+        # If track has a stored file_path (from exact match or ISRC scan), use it
+        if track.file_path and os.path.exists(track.file_path):
+            filepath = track.file_path
+            file_exists = True
+        else:
+            # Otherwise, construct the expected path
+            track_outpath = worker.outpath
+            
+            if worker.use_artist_subfolders:
+                if worker.use_album_subfolders:
+                    if worker._various_artists_cache.get(track.album, False):
+                        artist_folder = "Various Artists"
+                    else:
+                        artist_folder = worker.get_sanitized_artist_folder(track)
                 else:
                     artist_folder = worker.get_sanitized_artist_folder(track)
-            else:
-                artist_folder = worker.get_sanitized_artist_folder(track)
-            track_outpath = os.path.join(track_outpath, artist_folder)
+                track_outpath = os.path.join(track_outpath, artist_folder)
+            
+            if worker.use_album_subfolders:
+                album_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", track.album)
+                track_outpath = os.path.join(track_outpath, album_folder)
+            
+            # Use track's own track number, fallback to position in list
+            position = track.track_number if track.track_number else i + 1
+            filename = worker.get_formatted_filename(track, position)
+            filepath = os.path.join(track_outpath, filename)
+            
+            # Check if file exists
+            file_exists = os.path.exists(filepath)
         
-        if worker.use_album_subfolders:
-            album_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", track.album)
-            track_outpath = os.path.join(track_outpath, album_folder)
-        
-        # Use track's own track number, fallback to position in list
-        position = track.track_number if track.track_number else i + 1
-        filename = worker.get_formatted_filename(track, position)
-        filepath = os.path.join(track_outpath, filename)
+        # Count missing files
+        if not file_exists:
+            missing_count += 1
         
         # Build relative path from playlist location to track file
         rel_path = os.path.relpath(filepath, worker.outpath)
-        
-        # Check if file exists
-        if not os.path.exists(filepath):
-            missing_count += 1
         
         # Calculate duration in seconds (use 0 for unknown duration)
         duration = track.duration_ms // 1000 if track.duration_ms else 0
@@ -554,7 +564,7 @@ def create_m3u8_playlist(worker, check_only=False):
             'duration': duration,
             'title': track.title,
             'artist': track.artists,
-            'exists': os.path.exists(filepath)
+            'exists': file_exists
         })
     
     # If check_only mode and files are missing, don't create playlist
@@ -687,6 +697,7 @@ class DownloadWorker:
                     else:
                         update_progress(f"File already exists: {new_filename}. Skipping download.")
                     track.downloaded = True
+                    track.file_path = new_filepath  # Store the actual file path
                     continue
 
                 # Phase 2: Smart ISRC scan in artist directories (only if Phase 1 fails)
@@ -699,6 +710,7 @@ class DownloadWorker:
                     )
                     if existing_file:
                         track.downloaded = True
+                        track.file_path = existing_file  # Store the actual file path found by ISRC
                         if self.check_only:
                             update_progress(f"[✓] Found by ISRC: {os.path.basename(existing_file)}")
                         else:
@@ -839,6 +851,7 @@ class DownloadWorker:
                                     )
                             update_progress(f"Successfully downloaded using: {svc}")
                             track.downloaded = True
+                            track.file_path = new_filepath  # Store the actual file path
                             download_success = True
                             
                             # Embed lyrics if requested
