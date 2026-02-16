@@ -5,11 +5,12 @@ import argparse
 import asyncio
 
 from dataclasses import dataclass
-from SpotiFLAC.getMetadata import get_filtered_data, parse_uri, SpotifyInvalidUrlException
+from SpotiFLAC.getMetadata import get_filtered_data, parse_uri, SpotifyInvalidUrlException, get_track_lyrics
 from SpotiFLAC.tidalDL import TidalDownloader
 from SpotiFLAC.deezerDL import DeezerDownloader
 from SpotiFLAC.qobuzDL import QobuzDownloader
 from SpotiFLAC.amazonDL import AmazonDownloader
+from mutagen.flac import FLAC
 
 
 @dataclass
@@ -517,8 +518,6 @@ class DownloadWorker:
                             if self.embed_lyrics:
                                 try:
                                     update_progress(f"Fetching lyrics for: {track.title}")
-                                    from SpotiFLAC.getMetadata import get_track_lyrics
-                                    from mutagen.flac import FLAC
                                     
                                     lyrics = get_track_lyrics(track.id)
                                     

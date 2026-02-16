@@ -495,7 +495,7 @@ def get_track_lyrics(track_id: str) -> str:
         # Extract lyrics lines from the response
         if 'lyrics' in lyrics_data and 'lines' in lyrics_data['lyrics']:
             lines = lyrics_data['lyrics']['lines']
-            lyrics_text = '\n'.join(line.get('words', '') for line in lines if line.get('words'))
+            lyrics_text = '\n'.join(line['words'] for line in lines if line.get('words'))
             return lyrics_text
         
         return ""
