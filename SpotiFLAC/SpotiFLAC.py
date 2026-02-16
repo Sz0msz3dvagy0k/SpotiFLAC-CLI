@@ -688,25 +688,29 @@ class DownloadWorker:
                         update_progress(f"File already exists: {new_filename}. Skipping download.")
                     track.downloaded = True
                     continue
-                
-                # If in check-only mode and file doesn't exist, mark as missing and continue
-                if self.check_only:
-                    update_progress(f"[✗] Missing: {new_filename}")
-                    continue
 
                 # Phase 2: Smart ISRC scan in artist directories (only if Phase 1 fails)
-                if track.isrc:
+                # This runs in BOTH check-only and download modes
+                if track.isrc and (self.use_artist_subfolders or self.use_album_subfolders):
                     existing_file, found_dir = check_isrc_in_artist_dirs(
                         base_dir=self.outpath,
                         artist_name=track.artists,
                         isrc=track.isrc
                     )
                     if existing_file:
-                        update_progress(
-                            f"File found by ISRC in {found_dir}: {os.path.basename(existing_file)}. Skipping download."
-                        )
                         track.downloaded = True
+                        if self.check_only:
+                            update_progress(f"[✓] Found by ISRC: {os.path.basename(existing_file)}")
+                        else:
+                            update_progress(
+                                f"File found by ISRC in {found_dir}: {os.path.basename(existing_file)}. Skipping download."
+                            )
                         continue
+                
+                # If in check-only mode and file doesn't exist, mark as missing and continue
+                if self.check_only:
+                    update_progress(f"[✗] Missing: {new_filename}")
+                    continue
 
                 download_success = False
                 last_error = None
