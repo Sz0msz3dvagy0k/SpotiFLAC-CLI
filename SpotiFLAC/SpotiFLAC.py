@@ -338,7 +338,9 @@ def detect_various_artists_album(tracks, album_name):
         return False
     
     # Get unique artists for this album (normalize by stripping whitespace)
-    # Filter out None values and non-string types to avoid AttributeError
+    # Filter out None values and non-string types to avoid AttributeError.
+    # The isinstance check is necessary because t.artists could theoretically be
+    # other truthy types (e.g., a list) in malformed data or future schema changes.
     unique_artists = set(t.artists.strip() for t in album_tracks if t.artists and isinstance(t.artists, str))
     
     # If more than one unique artist for this album, it's a various artists album
@@ -380,6 +382,10 @@ class DownloadWorker:
 
     def get_sanitized_artist_folder(self, track):
         """Extract and sanitize the artist name for folder creation."""
+        # Handle None or non-string artist values
+        if not track.artists or not isinstance(track.artists, str):
+            return "Unknown Artist"
+        
         artist_name = track.artists.split(", ")[0] if ", " in track.artists else track.artists
         return re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", artist_name)
 
