@@ -176,11 +176,14 @@ def download_tracks(indices):
 
     tracks_to_download = config.tracks if config.is_single_track else [config.tracks[i] for i in indices]
 
+    # Only create album/playlist folder if NOT using artist/album subfolders
+    # When subfolders are enabled, DownloadWorker handles the structure
     if config.is_album or config.is_playlist:
-        name = config.album_or_playlist_name.strip()
-        folder_name = re.sub(r'[<>:"/\\|?*]', '_', name)
-        outpath = os.path.join(outpath, folder_name)
-        os.makedirs(outpath, exist_ok=True)
+        if not config.use_artist_subfolders and not config.use_album_subfolders:
+            name = config.album_or_playlist_name.strip()
+            folder_name = re.sub(r'[<>:"/\\|?*]', '_', name)
+            outpath = os.path.join(outpath, folder_name)
+            os.makedirs(outpath, exist_ok=True)
 
     try:
         start_download_worker(tracks_to_download, outpath)
