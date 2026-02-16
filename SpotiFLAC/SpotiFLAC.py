@@ -520,11 +520,13 @@ def create_m3u8_playlist(worker, check_only=False):
     
     for i, track in enumerate(worker.tracks):
         # If track has a stored file_path (from exact match or ISRC scan), use it
+        # This ensures playlist references the actual file location, not the expected one
         if track.file_path and os.path.exists(track.file_path):
             filepath = track.file_path
             file_exists = True
         else:
-            # Otherwise, construct the expected path
+            # Otherwise, construct the expected path based on format settings
+            # This fallback is used when tracks haven't been checked/downloaded yet
             track_outpath = worker.outpath
             
             if worker.use_artist_subfolders:
