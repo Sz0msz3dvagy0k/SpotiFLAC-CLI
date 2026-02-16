@@ -12,12 +12,18 @@ Specify the format for naming downloaded files. U can customize the name by addi
 Organize downloaded files into subfolders by artist.<br><br>
 <i>use-album-subfolders</i><br>
 Organize downloaded files into subfolders by album.<br><br>
+<i>embed-lyrics</i><br>
+Embed lyrics into FLAC files.<br><br>
+<i>checkonly</i><br>
+Check if songs already exist without downloading. Prints status for each track showing whether it's found or missing.<br><br>
+<i>createplaylist</i><br>
+Create M3U8 playlist file from the album/playlist. Works with albums and playlists (not single tracks). When combined with --checkonly, only creates playlist if all tracks are present.<br><br>
 <i>loop minutes</i><br>
 Specify the duration in minutes to keep retrying downloads in case of failures. Default is 0 (no retries).<br>
 <h3>Example usage:</h3>
 
 ```bash
-python3 launcher.py "https://open.spotify.com/album/xyz" "/path/to/output_dir" --filename-format "[{year}] {album} - {track_number} {title}" --service qobuz --use-artist-subfolders --use-album-subfolders --loop 120
+python3 launcher.py "https://open.spotify.com/album/xyz" "/path/to/output_dir" --filename-format "[{year}] {album} - {track_number} {title}" --service qobuz --use-artist-subfolders --use-album-subfolders --checkonly --createplaylist --loop 120
 ```
 
 <h2>CLI program usage</h2>
@@ -33,6 +39,9 @@ Program can also be ran by downloading the python files and calling <code>python
                         [--filename-format "{title} - {artist}"]
                         [--use-track-numbers] [--use-artist-subfolders]
                         [--use-album-subfolders]
+                        [--embed-lyrics]
+                        [--checkonly]
+                        [--createplaylist]
                         [--loop minutes]
 ```
 
@@ -46,6 +55,9 @@ chmod +x SpotiFLAC-Linux-arm64
                         [--filename-format "{title} - {artist}"]
                         [--use-track-numbers] [--use-artist-subfolders]
                         [--use-album-subfolders]
+                        [--embed-lyrics]
+                        [--checkonly]
+                        [--createplaylist]
                         [--loop minutes]
 ```
 
@@ -63,6 +75,9 @@ SpotiFLAC(
     use_track_numbers=False,
     use_artist_subfolders=False,
     use_album_subfolders=False,
+    embed_lyrics=False,
+    check_only=False,
+    create_playlist=False,
     loop=None
 )
 ```
@@ -80,6 +95,9 @@ SpotiFLAC(
     use_track_numbers=True,
     use_artist_subfolders=True,
     use_album_subfolders=True,
+    embed_lyrics=True,
+    check_only=False,
+    create_playlist=True,
     loop=120
 )
 

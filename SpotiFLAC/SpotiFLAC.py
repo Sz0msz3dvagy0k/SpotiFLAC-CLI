@@ -23,6 +23,8 @@ class Config:
     use_artist_subfolders: bool = False
     use_album_subfolders: bool = False
     embed_lyrics: bool = False
+    check_only: bool = False
+    create_playlist: bool = False
     is_album: bool = False
     is_playlist: bool = False
     is_single_track: bool = False
@@ -205,6 +207,8 @@ def start_download_worker(tracks_to_download, outpath):
         config.use_album_subfolders,
         config.service,
         config.embed_lyrics,
+        config.check_only,
+        config.create_playlist,
     )
     config.worker.run()
 
@@ -347,11 +351,110 @@ def detect_various_artists_album(tracks, album_name):
     return len(unique_artists) > 1
 
 
+def create_m3u8_playlist(worker, check_only=False):
+    """
+    Create an M3U8 playlist file from the tracks.
+    
+    Args:
+        worker: DownloadWorker instance with tracks and settings
+        check_only: If True, only create playlist if all tracks exist
+        
+    Returns:
+        bool: True if playlist was created, False otherwise
+    """
+    # Only create playlists for albums and playlists, not single tracks
+    if worker.is_single_track:
+        return False
+    
+    if not (worker.is_album or worker.is_playlist):
+        return False
+    
+    # Sanitize playlist name
+    playlist_name = re.sub(r'[<>:"/\\|?*]', '_', worker.album_or_playlist_name.strip())
+    playlist_filename = f"{playlist_name}.m3u8"
+    playlist_path = os.path.join(worker.outpath, playlist_filename)
+    
+    # Build track file paths
+    track_files = []
+    missing_count = 0
+    
+    for i, track in enumerate(worker.tracks):
+        track_outpath = worker.outpath
+        
+        if worker.use_artist_subfolders:
+            if worker.use_album_subfolders:
+                if track.album not in worker._various_artists_cache:
+                    worker._various_artists_cache[track.album] = detect_various_artists_album(worker.tracks, track.album)
+                
+                if worker._various_artists_cache[track.album]:
+                    artist_folder = "Various Artists"
+                else:
+                    artist_name = track.artists.split(", ")[0] if ", " in track.artists and track.artists else track.artists
+                    if not artist_name or not isinstance(artist_name, str):
+                        artist_name = "Unknown Artist"
+                    artist_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", artist_name)
+            else:
+                artist_name = track.artists.split(", ")[0] if ", " in track.artists and track.artists else track.artists
+                if not artist_name or not isinstance(artist_name, str):
+                    artist_name = "Unknown Artist"
+                artist_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", artist_name)
+            track_outpath = os.path.join(track_outpath, artist_folder)
+        
+        if worker.use_album_subfolders:
+            album_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", track.album)
+            track_outpath = os.path.join(track_outpath, album_folder)
+        
+        filename = worker.get_formatted_filename(track, i + 1)
+        filepath = os.path.join(track_outpath, filename)
+        
+        # Build relative path from playlist location to track file
+        rel_path = os.path.relpath(filepath, worker.outpath)
+        
+        # Check if file exists
+        if not os.path.exists(filepath):
+            missing_count += 1
+        
+        # Calculate duration in seconds
+        duration = track.duration_ms // 1000 if track.duration_ms else -1
+        
+        track_files.append({
+            'path': rel_path,
+            'duration': duration,
+            'title': track.title,
+            'artist': track.artists,
+            'exists': os.path.exists(filepath)
+        })
+    
+    # If check_only mode and files are missing, don't create playlist
+    if check_only and missing_count > 0:
+        total_tracks = len(track_files)
+        update_progress(f"\nPlaylist incomplete. Missing {missing_count} of {total_tracks} tracks. Playlist not created.")
+        return False
+    
+    # If check_only mode and all files exist, create playlist
+    if check_only:
+        update_progress(f"\nAll tracks present. Creating playlist: {playlist_filename}")
+    
+    # Write M3U8 file
+    try:
+        with open(playlist_path, 'w', encoding='utf-8') as f:
+            f.write("#EXTM3U\n")
+            for track_info in track_files:
+                f.write(f"#EXTINF:{track_info['duration']},{track_info['artist']} - {track_info['title']}\n")
+                f.write(f"{track_info['path']}\n")
+        
+        update_progress(f"\nPlaylist created: {playlist_filename}")
+        return True
+    except Exception as e:
+        update_progress(f"\n[!] Warning: Failed to create playlist: {e}")
+        return False
+
+
 class DownloadWorker:
     def __init__(self, tracks, outpath, is_single_track=False, is_album=False, is_playlist=False,
                  album_or_playlist_name='', filename_format='{title} - {artist}', use_track_numbers=True,
                  use_artist_subfolders=False, use_album_subfolders=False, services=["tidal"], 
-                 embed_lyrics=False):
+                 embed_lyrics=False, check_only=False, create_playlist=False):
         super().__init__()
         self.tracks = tracks
         self.outpath = outpath
@@ -365,6 +468,8 @@ class DownloadWorker:
         self.use_album_subfolders = use_album_subfolders
         self.services = services
         self.embed_lyrics = embed_lyrics
+        self.check_only = check_only
+        self.create_playlist = create_playlist
         self.failed_tracks = []
         self._various_artists_cache = {}
 
@@ -413,7 +518,11 @@ class DownloadWorker:
                 if track.downloaded:
                     continue
 
-                update_progress(f"[{i + 1}/{total_tracks}] Starting download: {track.title} - {track.artists}")
+                # In check-only mode, use a different message
+                if self.check_only:
+                    update_progress(f"[{i + 1}/{total_tracks}] Checking: {track.title} - {track.artists}")
+                else:
+                    update_progress(f"[{i + 1}/{total_tracks}] Starting download: {track.title} - {track.artists}")
 
                 track_outpath = self.outpath
 
@@ -440,8 +549,16 @@ class DownloadWorker:
                 new_filepath = os.path.join(track_outpath, new_filename)
 
                 if os.path.exists(new_filepath) and os.path.getsize(new_filepath) > 0:
-                    update_progress(f"File already exists: {new_filename}. Skipping download.")
+                    if self.check_only:
+                        update_progress(f"[✓] Found: {new_filename}")
+                    else:
+                        update_progress(f"File already exists: {new_filename}. Skipping download.")
                     track.downloaded = True
+                    continue
+                
+                # If in check-only mode and file doesn't exist, mark as missing and continue
+                if self.check_only:
+                    update_progress(f"[✗] Missing: {new_filename}")
                     continue
 
                 download_success = False
@@ -608,7 +725,11 @@ class DownloadWorker:
 
             total_elapsed = time.perf_counter() - start
 
-            msg = "Download completed!"
+            # Create M3U8 playlist if requested
+            if self.create_playlist:
+                create_m3u8_playlist(self, self.check_only)
+
+            msg = "Download completed!" if not self.check_only else "Check completed!"
             if self.failed_tracks:
                 msg += f"\n\nFailed downloads: {len(self.failed_tracks)}"
 
@@ -639,6 +760,8 @@ def parse_args():
     parser.add_argument("--use-artist-subfolders", action="store_true")
     parser.add_argument("--use-album-subfolders", action="store_true")
     parser.add_argument("--embed-lyrics", action="store_true", help="Embed lyrics into FLAC files")
+    parser.add_argument("--checkonly", action="store_true", help="Check if songs exist without downloading")
+    parser.add_argument("--createplaylist", action="store_true", help="Create M3U8 playlist file from album/playlist")
     parser.add_argument("--loop", type=int, help="Loop delay in minutes")
     return parser.parse_args()
 
@@ -652,6 +775,8 @@ def SpotiFLAC(
         use_artist_subfolders=False,
         use_album_subfolders=False,
         embed_lyrics=False,
+        check_only=False,
+        create_playlist=False,
         loop=None
 ):
     global config
@@ -664,6 +789,8 @@ def SpotiFLAC(
         use_artist_subfolders=use_artist_subfolders,
         use_album_subfolders=use_album_subfolders,
         embed_lyrics=embed_lyrics,
+        check_only=check_only,
+        create_playlist=create_playlist,
         loop=loop
     )
 
@@ -685,6 +812,8 @@ def main():
         use_artist_subfolders=args.use_artist_subfolders,
         use_album_subfolders=args.use_album_subfolders,
         embed_lyrics=args.embed_lyrics,
+        check_only=args.checkonly,
+        create_playlist=args.createplaylist,
         loop=args.loop
     )
 
