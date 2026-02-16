@@ -338,7 +338,7 @@ def detect_various_artists_album(tracks, album_name):
         return False
     
     # Get unique artists for this album (normalize by stripping whitespace)
-    unique_artists = set(t.artists.strip() for t in album_tracks)
+    unique_artists = set(t.artists.strip() for t in album_tracks if t.artists)
     
     # If more than one unique artist for this album, it's a various artists album
     return len(unique_artists) > 1
@@ -363,6 +363,7 @@ class DownloadWorker:
         self.services = services
         self.embed_lyrics = embed_lyrics
         self.failed_tracks = []
+        self._various_artists_cache = {}
 
     def get_formatted_filename(self, track, position=1):
         if self.filename_format in ["title_artist", "artist_title", "title_only"]:
@@ -397,9 +398,18 @@ class DownloadWorker:
                 track_outpath = self.outpath
 
                 if self.use_artist_subfolders:
-                    # Check if this is a various artists album
-                    if self.use_album_subfolders and detect_various_artists_album(self.tracks, track.album):
-                        artist_folder = "Various Artists"
+                    # Check if this is a various artists album (with caching)
+                    if self.use_album_subfolders:
+                        # Use cache to avoid repeated checks for the same album
+                        if track.album not in self._various_artists_cache:
+                            self._various_artists_cache[track.album] = detect_various_artists_album(self.tracks, track.album)
+                        
+                        if self._various_artists_cache[track.album]:
+                            artist_folder = "Various Artists"
+                        else:
+                            artist_name = track.artists.split(", ")[0] if ", " in track.artists else track.artists
+                            artist_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_",
+                                                   artist_name)
                     else:
                         artist_name = track.artists.split(", ")[0] if ", " in track.artists else track.artists
                         artist_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_",
