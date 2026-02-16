@@ -358,23 +358,19 @@ class DownloadWorker:
 
                 update_progress(f"[{i + 1}/{total_tracks}] Starting download: {track.title} - {track.artists}")
 
-                if self.is_playlist:
-                    track_outpath = self.outpath
+                track_outpath = self.outpath
 
-                    if self.use_artist_subfolders:
-                        artist_name = track.artists.split(", ")[0] if ", " in track.artists else track.artists
-                        artist_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_",
-                                               artist_name)
-                        track_outpath = os.path.join(track_outpath, artist_folder)
+                if self.use_artist_subfolders:
+                    artist_name = track.artists.split(", ")[0] if ", " in track.artists else track.artists
+                    artist_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_",
+                                           artist_name)
+                    track_outpath = os.path.join(track_outpath, artist_folder)
 
-                    if self.use_album_subfolders:
-                        album_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", track.album)
-                        track_outpath = os.path.join(track_outpath, album_folder)
+                if self.use_album_subfolders:
+                    album_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", track.album)
+                    track_outpath = os.path.join(track_outpath, album_folder)
 
-                    os.makedirs(track_outpath, exist_ok=True)
-
-                else:
-                    track_outpath = self.outpath
+                os.makedirs(track_outpath, exist_ok=True)
 
                 new_filename = self.get_formatted_filename(track, i + 1)
                 new_filepath = os.path.join(track_outpath, new_filename)
