@@ -3,3 +3,8 @@ __pycache__/
 .python-version
 .DS_Store
 .venv/
+
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
