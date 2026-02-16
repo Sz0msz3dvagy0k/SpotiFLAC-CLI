@@ -337,8 +337,7 @@ def detect_various_artists_album(tracks, album_name):
     if len(album_tracks) <= 1:
         return False
     
-    # Get unique artists for this album (normalize by stripping whitespace)
-    # Filter out None values, non-string types, and empty/whitespace-only strings
+    # Get unique artists, filtering out None, non-string, and empty/whitespace values
     unique_artists = set(
         stripped for t in album_tracks 
         if isinstance(t.artists, str) and (stripped := t.artists.strip())
