@@ -122,7 +122,8 @@ def _check_isrc_exists(directory: str, isrc: str, artist_name: str = "") -> Tupl
     pattern_parts = []
     for word in artist_words:
         escaped_word = re.escape(word)
-        pattern_parts.append(f"(?=.*{escaped_word})")
+        # Use word boundaries to avoid partial matches
+        pattern_parts.append(f"(?=.*\\b{escaped_word}\\b)")
     
     pattern = "".join(pattern_parts)
     

@@ -80,11 +80,13 @@ def check_isrc_in_artist_dirs(base_dir: str, artist_name: str, isrc: str) -> tup
     
     # Build pattern that matches directories containing all artist name words
     # Example: "DJ Shadow" matches "DJ Shadow", "dj_shadow", "DJ-Shadow", etc.
+    # Use word boundaries to avoid partial matches
     pattern_parts = []
     for word in artist_words:
-        # Escape special regex characters but allow word boundaries
+        # Escape special regex characters and use word boundaries
         escaped_word = re.escape(word)
-        pattern_parts.append(f"(?=.*{escaped_word})")
+        # Allow underscores, hyphens, and spaces around the word
+        pattern_parts.append(f"(?=.*\\b{escaped_word}\\b)")
     
     # Combine into a single pattern (case-insensitive, matches all words in any order)
     pattern = "".join(pattern_parts)
