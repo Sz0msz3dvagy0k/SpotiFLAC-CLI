@@ -338,10 +338,13 @@ def detect_various_artists_album(tracks, album_name):
         return False
     
     # Get unique artists for this album (normalize by stripping whitespace)
-    # Filter out None values and non-string types to avoid AttributeError.
+    # Filter out None values, non-string types, and empty/whitespace-only strings
     # The isinstance check is necessary because t.artists could theoretically be
     # other truthy types (e.g., a list) in malformed data or future schema changes.
-    unique_artists = set(t.artists.strip() for t in album_tracks if t.artists and isinstance(t.artists, str))
+    unique_artists = set(
+        stripped for t in album_tracks 
+        if isinstance(t.artists, str) and (stripped := t.artists.strip())
+    )
     
     # If more than one unique artist for this album, it's a various artists album
     return len(unique_artists) > 1
