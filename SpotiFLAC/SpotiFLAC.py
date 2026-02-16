@@ -21,6 +21,7 @@ class Config:
     use_track_numbers: bool = False
     use_artist_subfolders: bool = False
     use_album_subfolders: bool = False
+    embed_lyrics: bool = False
     is_album: bool = False
     is_playlist: bool = False
     is_single_track: bool = False
@@ -199,6 +200,7 @@ def start_download_worker(tracks_to_download, outpath):
         config.use_artist_subfolders,
         config.use_album_subfolders,
         config.service,
+        config.embed_lyrics,
     )
     config.worker.run()
 
@@ -313,7 +315,8 @@ def format_custom_filename(template: str, track, position: int = 1) -> str:
 class DownloadWorker:
     def __init__(self, tracks, outpath, is_single_track=False, is_album=False, is_playlist=False,
                  album_or_playlist_name='', filename_format='{title} - {artist}', use_track_numbers=True,
-                 use_artist_subfolders=False, use_album_subfolders=False, services=["tidal"]):
+                 use_artist_subfolders=False, use_album_subfolders=False, services=["tidal"], 
+                 embed_lyrics=False):
         super().__init__()
         self.tracks = tracks
         self.outpath = outpath
@@ -326,6 +329,7 @@ class DownloadWorker:
         self.use_artist_subfolders = use_artist_subfolders
         self.use_album_subfolders = use_album_subfolders
         self.services = services
+        self.embed_lyrics = embed_lyrics
         self.failed_tracks = []
 
     def get_formatted_filename(self, track, position=1):
@@ -508,6 +512,27 @@ class DownloadWorker:
                             update_progress(f"Successfully downloaded using: {svc}")
                             track.downloaded = True
                             download_success = True
+                            
+                            # Embed lyrics if requested
+                            if self.embed_lyrics:
+                                try:
+                                    update_progress(f"Fetching lyrics for: {track.title}")
+                                    from SpotiFLAC.getMetadata import get_track_lyrics
+                                    from mutagen.flac import FLAC
+                                    
+                                    lyrics = get_track_lyrics(track.id)
+                                    
+                                    if lyrics:
+                                        audio = FLAC(new_filepath)
+                                        audio['LYRICS'] = lyrics
+                                        audio.save()
+                                        update_progress(f"Embedded lyrics for: {track.title}")
+                                    else:
+                                        update_progress(f"No lyrics available for: {track.title}")
+                                except Exception as e:
+                                    update_progress(f"[!] Warning: Failed to embed lyrics: {e}")
+                                    # Don't fail the download if lyrics embedding fails
+                            
                             break
 
                         else:
@@ -555,6 +580,7 @@ def parse_args():
     parser.add_argument("--use-track-numbers", action="store_true", help="(Deprecated - use {track} in format)")
     parser.add_argument("--use-artist-subfolders", action="store_true")
     parser.add_argument("--use-album-subfolders", action="store_true")
+    parser.add_argument("--embed-lyrics", action="store_true", help="Embed lyrics into FLAC files")
     parser.add_argument("--loop", type=int, help="Loop delay in minutes")
     return parser.parse_args()
 
@@ -567,6 +593,7 @@ def SpotiFLAC(
         use_track_numbers=False,
         use_artist_subfolders=False,
         use_album_subfolders=False,
+        embed_lyrics=False,
         loop=None
 ):
     global config
@@ -578,6 +605,7 @@ def SpotiFLAC(
         use_track_numbers=use_track_numbers,
         use_artist_subfolders=use_artist_subfolders,
         use_album_subfolders=use_album_subfolders,
+        embed_lyrics=embed_lyrics,
         loop=loop
     )
 
@@ -598,6 +626,7 @@ def main():
         use_track_numbers=args.use_track_numbers,
         use_artist_subfolders=args.use_artist_subfolders,
         use_album_subfolders=args.use_album_subfolders,
+        embed_lyrics=args.embed_lyrics,
         loop=args.loop
     )
 
