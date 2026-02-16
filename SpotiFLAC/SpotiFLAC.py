@@ -374,6 +374,13 @@ def create_m3u8_playlist(worker, check_only=False):
     playlist_filename = f"{playlist_name}.m3u8"
     playlist_path = os.path.join(worker.outpath, playlist_filename)
     
+    # Pre-populate various artists cache if using both subfolders
+    if worker.use_artist_subfolders and worker.use_album_subfolders:
+        unique_albums = set(track.album for track in worker.tracks if track.album)
+        for album in unique_albums:
+            if album not in worker._various_artists_cache:
+                worker._various_artists_cache[album] = detect_various_artists_album(worker.tracks, album)
+    
     # Build track file paths
     track_files = []
     missing_count = 0
@@ -383,10 +390,7 @@ def create_m3u8_playlist(worker, check_only=False):
         
         if worker.use_artist_subfolders:
             if worker.use_album_subfolders:
-                if track.album not in worker._various_artists_cache:
-                    worker._various_artists_cache[track.album] = detect_various_artists_album(worker.tracks, track.album)
-                
-                if worker._various_artists_cache[track.album]:
+                if worker._various_artists_cache.get(track.album, False):
                     artist_folder = "Various Artists"
                 else:
                     artist_folder = worker.get_sanitized_artist_folder(track)
@@ -398,7 +402,9 @@ def create_m3u8_playlist(worker, check_only=False):
             album_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", track.album)
             track_outpath = os.path.join(track_outpath, album_folder)
         
-        filename = worker.get_formatted_filename(track, i + 1)
+        # Use track's own track number, fallback to position in list
+        position = track.track_number if track.track_number else i + 1
+        filename = worker.get_formatted_filename(track, position)
         filepath = os.path.join(track_outpath, filename)
         
         # Build relative path from playlist location to track file
@@ -408,8 +414,8 @@ def create_m3u8_playlist(worker, check_only=False):
         if not os.path.exists(filepath):
             missing_count += 1
         
-        # Calculate duration in seconds
-        duration = track.duration_ms // 1000 if track.duration_ms else -1
+        # Calculate duration in seconds (use 0 for unknown duration)
+        duration = track.duration_ms // 1000 if track.duration_ms else 0
         
         track_files.append({
             'path': rel_path,
