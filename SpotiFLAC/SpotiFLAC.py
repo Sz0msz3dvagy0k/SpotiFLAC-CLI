@@ -13,6 +13,11 @@ from SpotiFLAC.qobuzDL import QobuzDownloader
 from SpotiFLAC.amazonDL import AmazonDownloader
 from mutagen.flac import FLAC
 
+# Constants for artist folder matching
+# These characters are treated as interchangeable separators in artist names
+SEPARATOR_CHARS = '.-_'
+SEPARATOR_PATTERN = r'[.\-_]'
+
 
 @dataclass
 class Config:
@@ -163,9 +168,6 @@ def check_isrc_in_artist_dirs(base_dir: str, artist_name: str, isrc: str) -> tup
         # Build pattern that matches directories containing all artist name words
         # Example: "DJ Shadow" matches "DJ Shadow", "dj_shadow", "DJ-Shadow", etc.
         # Use custom boundaries instead of \b to handle special characters
-        # Pattern that matches dots, hyphens, and underscores interchangeably
-        SEPARATOR_PATTERN = r'[.\-_]'
-        
         pattern_parts = []
         for word in artist_words:
             # Normalize the word
@@ -176,7 +178,7 @@ def check_isrc_in_artist_dirs(base_dir: str, artist_name: str, isrc: str) -> tup
             # Build a flexible pattern character by character
             flexible_word = ""
             for char in word:
-                if char in '.-_':
+                if char in SEPARATOR_CHARS:
                     # Any of these characters can match each other
                     flexible_word += SEPARATOR_PATTERN
                 else:
