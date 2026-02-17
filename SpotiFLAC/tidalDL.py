@@ -426,7 +426,7 @@ class TidalDownloader:
         Raises:
             Exception: If user chooses to skip or quit
         """
-        print(f"\n[X] tidal failed: ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
+        print(f"\n[X] Tidal failed: ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
         
         # Display up to 5 tracks
         display_tracks = all_tracks[:5]
@@ -467,8 +467,9 @@ class TidalDownloader:
                     print("Invalid input. Please enter a number (1-5), 'm', 's', or 'q'.")
             
             except KeyboardInterrupt:
+                # User pressed Ctrl+C - let it propagate up to be caught by the outer handler
                 print("\nSkipping track.")
-                raise Exception(f"ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
+                raise
 
     def _manual_isrc_entry(self, all_tracks: List[Dict]) -> Dict:
         """
@@ -528,8 +529,9 @@ class TidalDownloader:
                         raise Exception(f"Failed to find track with ISRC {manual_isrc}")
             
             except KeyboardInterrupt:
+                # User pressed Ctrl+C - let it propagate up
                 print("\nCancelled manual ISRC entry.")
-                raise Exception("Manual ISRC entry cancelled by user")
+                raise
 
     def get_tidal_url_from_spotify(self, spotify_track_id: str) -> str:
         spotify_base = base64.b64decode("aHR0cHM6Ly9vcGVuLnNwb3RpZnkuY29tL3RyYWNrLw==").decode()
