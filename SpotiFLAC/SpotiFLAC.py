@@ -3,6 +3,7 @@ import re
 import time
 import argparse
 import asyncio
+import unicodedata
 
 from dataclasses import dataclass
 from SpotiFLAC.getMetadata import get_filtered_data, parse_uri, SpotifyInvalidUrlException, get_track_lyrics
@@ -51,6 +52,74 @@ class Track:
     file_path: str = ""  # Actual path to the downloaded/found file
 
 
+def normalize_string(s: str) -> str:
+    """
+    Normalize Unicode string for consistent comparison.
+    Uses NFKC normalization to handle various Unicode representations.
+    
+    Args:
+        s: String to normalize
+        
+    Returns:
+        Normalized string
+    """
+    if not s:
+        return s
+    return unicodedata.normalize('NFKC', s)
+
+
+def extract_artist_variations(artist_name: str) -> list[str]:
+    """
+    Extract multiple variations of artist names for matching.
+    Handles cases like:
+    - "Artist1, Artist2" -> ["Artist1", "Artist2", "Artist1, Artist2"]
+    - "Olly Alexander (Years & Years)" -> ["Olly Alexander", "Years & Years", "Olly Alexander (Years & Years)"]
+    - "League of Legends Music, TEYA" -> ["League of Legends Music", "TEYA", "League of Legends Music, TEYA"]
+    
+    Args:
+        artist_name: Full artist string from track metadata
+        
+    Returns:
+        List of artist name variations to try matching
+    """
+    variations = []
+    
+    if not artist_name:
+        return variations
+    
+    # Normalize the string first
+    artist_name = normalize_string(artist_name)
+    
+    # Always include the full artist name
+    variations.append(artist_name)
+    
+    # Extract content in parentheses (e.g., "Years & Years" from "Olly Alexander (Years & Years)")
+    parenthetical_match = re.search(r'\(([^)]+)\)', artist_name)
+    if parenthetical_match:
+        parenthetical_content = parenthetical_match.group(1).strip()
+        if parenthetical_content:
+            variations.append(parenthetical_content)
+        # Also add the part before parentheses
+        before_paren = artist_name[:parenthetical_match.start()].strip()
+        if before_paren:
+            variations.append(before_paren)
+    
+    # Split by common separators and add individual artists
+    for separator in [", ", " feat. ", " ft. ", " featuring ", " & ", " and "]:
+        if separator in artist_name:
+            parts = artist_name.split(separator)
+            for part in parts:
+                part = part.strip()
+                # Remove parenthetical content from individual parts
+                part = re.sub(r'\s*\([^)]*\)', '', part).strip()
+                if part and part not in variations:
+                    variations.append(part)
+            # Use only the first separator match
+            break
+    
+    return variations
+
+
 def check_isrc_in_artist_dirs(base_dir: str, artist_name: str, isrc: str) -> tuple[str | None, str | None]:
     """
     Check if a file with the given ISRC exists in artist-related directories.
@@ -67,77 +136,97 @@ def check_isrc_in_artist_dirs(base_dir: str, artist_name: str, isrc: str) -> tup
     if not isrc or not os.path.isdir(base_dir):
         return None, None
     
-    # Extract primary artist from string like "Artist1 feat. Artist2" or "Artist1, Artist2"
-    primary_artist = artist_name
-    for separator in [" feat. ", " ft. ", " featuring ", ", ", " & ", " and "]:
-        if separator in artist_name:
-            primary_artist = artist_name.split(separator)[0].strip()
-            break
-    
-    # Create regex pattern for matching artist directories
-    # Handle special characters and various naming conventions
-    artist_words = primary_artist.split()
-    if not artist_words:
-        # Fall back to checking root directory only
-        return _check_isrc_in_directory(base_dir, isrc)
-    
-    # Build pattern that matches directories containing all artist name words
-    # Example: "DJ Shadow" matches "DJ Shadow", "dj_shadow", "DJ-Shadow", etc.
-    # Use word boundaries to avoid partial matches
-    pattern_parts = []
-    for word in artist_words:
-        # Escape special regex characters and use word boundaries
-        escaped_word = re.escape(word)
-        # Allow underscores, hyphens, and spaces around the word
-        pattern_parts.append(f"(?=.*\\b{escaped_word}\\b)")
-    
-    # Combine into a single pattern (case-insensitive, matches all words in any order)
-    pattern = "".join(pattern_parts)
-    
-    try:
-        regex = re.compile(pattern, re.IGNORECASE)
-    except re.error:
-        # If regex compilation fails, fall back to simple check
-        return _check_isrc_in_directory(base_dir, isrc)
+    # Get all artist name variations to try
+    artist_variations = extract_artist_variations(artist_name)
     
     directories_to_check = []
     
     # Check root directory first (for flat structures)
     directories_to_check.append(base_dir)
     
-    # Find matching artist directories (limit depth to 2 levels)
-    try:
-        for entry in os.listdir(base_dir):
-            entry_path = os.path.join(base_dir, entry)
-            if os.path.isdir(entry_path):
-                # Check if directory name matches artist pattern
-                if regex.search(entry):
-                    directories_to_check.append(entry_path)
-                    # Also check subdirectories (album folders, etc.) - level 2
-                    try:
-                        for subentry in os.listdir(entry_path):
-                            subentry_path = os.path.join(entry_path, subentry)
-                            if os.path.isdir(subentry_path):
-                                directories_to_check.append(subentry_path)
-                    except (OSError, PermissionError):
-                        continue
+    # Try matching with each artist variation
+    for artist_variant in artist_variations:
+        # Create regex pattern for matching artist directories
+        # Handle special characters and various naming conventions
+        artist_words = artist_variant.split()
+        if not artist_words:
+            continue
         
-        # Also check common compilation folder names
-        compilation_folders = ["Various Artists", "Compilations", "VA", "Compilation"]
-        for folder in compilation_folders:
-            folder_path = os.path.join(base_dir, folder)
-            if os.path.isdir(folder_path):
+        # Build pattern that matches directories containing all artist name words
+        # Example: "DJ Shadow" matches "DJ Shadow", "dj_shadow", "DJ-Shadow", etc.
+        # Use custom boundaries instead of \b to handle special characters
+        pattern_parts = []
+        for word in artist_words:
+            # Normalize the word
+            word = normalize_string(word)
+            
+            # Replace dots, underscores, and hyphens with a pattern that matches any of them
+            # This allows "R.A.D." to match "R.A.D_", "R-A-D", etc.
+            # Build a flexible pattern character by character
+            flexible_word = ""
+            for char in word:
+                if char in '.\\-_':
+                    # Any of these characters can match each other
+                    flexible_word += r'[\.\-_]'
+                else:
+                    # Regular character - escape it for regex
+                    flexible_word += re.escape(char)
+            
+            # Use custom boundaries that handle special characters
+            # - Start of string or whitespace/underscore/hyphen/dot before word
+            # - End of string or whitespace/underscore/hyphen/dot after word
+            pattern_parts.append(f"(?=.*(?:^|[\\s_\\-\\.]){flexible_word}(?:[\\s_\\-\\.]|$))")
+        
+        # Combine into a single pattern (case-insensitive, matches all words in any order)
+        pattern = "".join(pattern_parts)
+        
+        try:
+            # Use re.UNICODE flag for proper Unicode support (Cyrillic, Japanese, etc.)
+            regex = re.compile(pattern, re.IGNORECASE | re.UNICODE)
+        except re.error:
+            # If regex compilation fails, skip this variation
+            continue
+        
+        # Find matching artist directories (limit depth to 2 levels)
+        try:
+            for entry in os.listdir(base_dir):
+                entry_path = os.path.join(base_dir, entry)
+                if os.path.isdir(entry_path):
+                    # Normalize entry name for comparison
+                    normalized_entry = normalize_string(entry)
+                    
+                    # Check if directory name matches artist pattern
+                    if regex.search(normalized_entry):
+                        if entry_path not in directories_to_check:
+                            directories_to_check.append(entry_path)
+                        # Also check subdirectories (album folders, etc.) - level 2
+                        try:
+                            for subentry in os.listdir(entry_path):
+                                subentry_path = os.path.join(entry_path, subentry)
+                                if os.path.isdir(subentry_path):
+                                    if subentry_path not in directories_to_check:
+                                        directories_to_check.append(subentry_path)
+                        except (OSError, PermissionError):
+                            continue
+        except (OSError, PermissionError):
+            pass
+    
+    # Also check common compilation folder names
+    compilation_folders = ["Various Artists", "Compilations", "VA", "Compilation"]
+    for folder in compilation_folders:
+        folder_path = os.path.join(base_dir, folder)
+        if os.path.isdir(folder_path):
+            if folder_path not in directories_to_check:
                 directories_to_check.append(folder_path)
-                # Check album subfolders in compilation directories
-                try:
-                    for subentry in os.listdir(folder_path):
-                        subentry_path = os.path.join(folder_path, subentry)
-                        if os.path.isdir(subentry_path):
+            # Check album subfolders in compilation directories
+            try:
+                for subentry in os.listdir(folder_path):
+                    subentry_path = os.path.join(folder_path, subentry)
+                    if os.path.isdir(subentry_path):
+                        if subentry_path not in directories_to_check:
                             directories_to_check.append(subentry_path)
-                except (OSError, PermissionError):
-                    continue
-    except (OSError, PermissionError):
-        pass
+            except (OSError, PermissionError):
+                continue
     
     # Check each directory for ISRC match
     for directory in directories_to_check:
@@ -632,6 +721,7 @@ class DownloadWorker:
     def get_sanitized_artist_folder(self, track):
         """
         Extract and sanitize the artist name for folder creation.
+        Uses the first artist variation from extract_artist_variations() for consistency.
         
         Args:
             track: Track object containing artist information
@@ -643,7 +733,20 @@ class DownloadWorker:
         if not track.artists or not isinstance(track.artists, str):
             return "Unknown Artist"
         
-        artist_name = track.artists.split(", ")[0] if ", " in track.artists else track.artists
+        # Get artist variations and use the most appropriate one
+        variations = extract_artist_variations(track.artists)
+        
+        # Prefer: 1) Primary artist (first in list after full name), 
+        #         2) Parenthetical content if it exists
+        #         3) Full artist string
+        if len(variations) > 1:
+            # If we have variations, use the first non-full-string variation
+            # This handles cases like "League of Legends Music, TEYA" -> "TEYA"
+            # and "Olly Alexander (Years & Years)" -> "Olly Alexander"
+            artist_name = variations[1]
+        else:
+            artist_name = variations[0] if variations else track.artists
+        
         return re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", artist_name)
 
     def run(self):
