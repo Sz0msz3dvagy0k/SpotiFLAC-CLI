@@ -429,7 +429,8 @@ class TidalDownloader:
                     return track
             
             # ISRC mismatch - try duration-based matching before interactive menu
-            print(f"No exact ISRC match found. Trying duration-based matching...")
+            if expected_duration:
+                print(f"No exact ISRC match found. Trying duration-based matching...")
         
         # Duration-based or quality-based matching (used when ISRC doesn't match or isn't provided)
         best_match: Optional[Dict] = None
@@ -880,7 +881,7 @@ class TidalDownloader:
         os.makedirs(output_dir, exist_ok=True)
 
         # Convert duration from milliseconds to seconds for matching
-        expected_duration_sec = duration_ms // 1000 if duration_ms > 0 else 0
+        expected_duration_sec = round(duration_ms / 1000) if duration_ms > 0 else 0
 
         try:
             track_info = self.search_track_by_metadata_with_isrc(query, artist_name, isrc or "", expected_duration_sec)
