@@ -40,6 +40,10 @@ def _set_download_progress(_mb_downloaded: float) -> None:
     return None
 
 
+# Constants for matching algorithm
+HIRES_QUALITY_BONUS = 0.05  # Bonus score for HIRES_LOSSLESS quality tracks
+
+
 def _sanitize_filename(value: str, fallback: str = "Unknown") -> str:
     if not value:
         return fallback
@@ -501,6 +505,7 @@ class TidalDownloader:
                 if len(matches) > 1:
                     print(f"Found {len(matches)} tracks with matching duration. Using title similarity...")
                     best_score = 0.0
+                    best_similarity = 0.0
                     best_match = matches[0]
                     
                     for track in matches:
@@ -509,15 +514,19 @@ class TidalDownloader:
                         
                         # Bonus for HIRES_LOSSLESS quality
                         tags = (track.get("mediaMetadata") or {}).get("tags") or []
-                        quality_bonus = 0.05 if "HIRES_LOSSLESS" in tags else 0.0
+                        quality_bonus = HIRES_QUALITY_BONUS if "HIRES_LOSSLESS" in tags else 0.0
                         
                         total_score = similarity + quality_bonus
                         
                         if total_score > best_score:
                             best_score = total_score
+                            best_similarity = similarity
                             best_match = track
                     
-                    print(f"Best match: '{best_match.get('title', '?')}' (similarity: {best_score:.2f})")
+                    print(
+                        f"Best match: '{best_match.get('title', '?')}' "
+                        f"(title similarity: {best_similarity:.2f}, total score: {best_score:.2f})"
+                    )
                 else:
                     # Only one match - use it (with quality preference)
                     best_match = matches[0]
