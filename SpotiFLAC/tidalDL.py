@@ -302,7 +302,9 @@ class TidalDownloader:
         try:
             for endpoint_pattern in isrc_endpoint_patterns:
                 try:
+                    print(f"Trying direct endpoint: {endpoint_pattern.replace(tracks_base, '/v1/tracks')}")
                     resp = requests.get(endpoint_pattern, headers=headers, timeout=self.timeout)
+                    print(f"Response status: {resp.status_code}")
                     if resp.status_code == 200:
                         data = resp.json()
                         # Check if we got a single track or a list
@@ -320,18 +322,20 @@ class TidalDownloader:
                     continue
                 except Exception as e:
                     # Other errors (likely 404 or invalid endpoint) - less verbose logging
-                    print(f"Endpoint pattern failed: {type(e).__name__}")
+                    print(f"Endpoint failed: {type(e).__name__}: {str(e)[:100]}")
                     continue
         except Exception as e:
             print(f"Direct ISRC endpoint search failed: {e}")
         
         # Strategy 2: Try text search with ISRC prefix (like Qobuz pattern)
-        # Use smaller limit (20) since ISRC is unique and we only need to find one match
+        # Use same limit as fallback search to ensure we don't miss tracks
         try:
             for query_format in [f"isrc:{isrc}", isrc]:
                 try:
-                    result = self.search_tracks_with_limit(query_format, 20)
+                    print(f"Trying text search with query: '{query_format}'")
+                    result = self.search_tracks_with_limit(query_format, 100)
                     items = result.get("items", [])
+                    print(f"Text search returned {len(items)} results")
                     # Look for exact ISRC match in results
                     for track in items:
                         if track.get("isrc") == isrc:
@@ -339,7 +343,7 @@ class TidalDownloader:
                             return track
                 except Exception as e:
                     # Log specific search failures for debugging
-                    print(f"Text search query failed: {type(e).__name__}")
+                    print(f"Text search query failed: {type(e).__name__}: {str(e)}")
                     continue
         except Exception as e:
             print(f"ISRC text search failed: {e}")
