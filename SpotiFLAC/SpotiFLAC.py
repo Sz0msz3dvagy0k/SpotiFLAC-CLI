@@ -71,10 +71,6 @@ def normalize_string(s: str) -> str:
 def extract_artist_variations(artist_name: str) -> list[str]:
     """
     Extract multiple variations of artist names for matching.
-    Handles cases like:
-    - "Artist1, Artist2" -> ["Artist1", "Artist2", "Artist1, Artist2"]
-    - "Olly Alexander (Years & Years)" -> ["Olly Alexander", "Years & Years", "Olly Alexander (Years & Years)"]
-    - "League of Legends Music, TEYA" -> ["League of Legends Music", "TEYA", "League of Legends Music, TEYA"]
     
     Args:
         artist_name: Full artist string from track metadata
