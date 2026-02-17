@@ -875,6 +875,7 @@ class DownloadWorker:
                                 isrc=track.isrc,
                                 output_dir=track_outpath,
                                 quality="LOSSLESS",
+                                duration_ms=track.duration_ms,
                             )
 
                             if isinstance(result, str) and os.path.exists(result):

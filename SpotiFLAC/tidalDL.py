@@ -428,17 +428,10 @@ class TidalDownloader:
                     )
                     return track
             
-            # ISRC mismatch - show interactive menu only if not in check_only mode
-            if not self.check_only:
-                try:
-                    return self._interactive_track_selection(all_tracks, spotify_isrc)
-                except KeyboardInterrupt:
-                    # User cancelled the interactive selection (Ctrl+C or quit option)
-                    raise Exception(f"Track selection cancelled by user (quit or Ctrl+C)")
-            
-            # In check_only mode or if interactive selection is skipped
-            raise Exception(f"ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
-
+            # ISRC mismatch - try duration-based matching before interactive menu
+            print(f"No exact ISRC match found. Trying duration-based matching...")
+        
+        # Duration-based or quality-based matching (used when ISRC doesn't match or isn't provided)
         best_match: Optional[Dict] = None
         if expected_duration:
             tolerance = 3
@@ -454,8 +447,30 @@ class TidalDownloader:
                     if "HIRES_LOSSLESS" in tags:
                         best_match = track
                         break
+                # If we found a duration match and had ISRC mismatch, log it but use the match
+                if spotify_isrc and best_match:
+                    print(
+                        f"✓ Using duration-based match: {best_match.get('artist', {}).get('name','?')} - "
+                        f"{best_match.get('title','?')} (Tidal ISRC: {best_match.get('isrc', 'N/A')}, "
+                        f"Expected ISRC: {spotify_isrc})"
+                    )
                 return best_match
 
+        # No duration match found - pick best quality or show interactive menu if ISRC mismatch
+        if spotify_isrc and not self.check_only:
+            # Had ISRC mismatch and no good automatic match - show interactive menu
+            print(f"No suitable automatic match found for ISRC {spotify_isrc}")
+            try:
+                return self._interactive_track_selection(all_tracks, spotify_isrc)
+            except KeyboardInterrupt:
+                # User cancelled the interactive selection (Ctrl+C or quit option)
+                raise Exception(f"Track selection cancelled by user (quit or Ctrl+C)")
+        
+        if spotify_isrc:
+            # In check_only mode with ISRC mismatch and no automatic match
+            raise Exception(f"ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
+
+        # No ISRC provided or no duration - just pick best quality track
         best_match = all_tracks[0]
         for track in all_tracks:
             tags = (track.get("mediaMetadata") or {}).get("tags") or []
@@ -860,11 +875,15 @@ class TidalDownloader:
         include_track_number: bool = False,
         position: int = 0,
         use_album_track_number: bool = False,
+        duration_ms: int = 0,
     ):
         os.makedirs(output_dir, exist_ok=True)
 
+        # Convert duration from milliseconds to seconds for matching
+        expected_duration_sec = duration_ms // 1000 if duration_ms > 0 else 0
+
         try:
-            track_info = self.search_track_by_metadata_with_isrc(query, artist_name, isrc or "", 0)
+            track_info = self.search_track_by_metadata_with_isrc(query, artist_name, isrc or "", expected_duration_sec)
         except Exception as exc:
             raise Exception(f"Error getting track info: {exc}")
 
