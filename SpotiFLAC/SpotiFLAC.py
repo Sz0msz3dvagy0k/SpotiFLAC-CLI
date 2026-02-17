@@ -418,7 +418,7 @@ def download_tracks(indices):
     if config.is_album or config.is_playlist:
         if not config.use_artist_subfolders and not config.use_album_subfolders:
             name = config.album_or_playlist_name.strip()
-            folder_name = re.sub(r'[<>:"/\\|?*]', '_', name)
+            folder_name = name
             outpath = os.path.join(outpath, folder_name)
             os.makedirs(outpath, exist_ok=True)
 
@@ -510,12 +510,12 @@ def format_seconds(seconds: float) -> str:
 
 
 def sanitize_filename_component(value: str) -> str:
-    """Sanitize individual filename components"""
+    """Normalize whitespace in filename components"""
     if not value:
         return ""
-    sanitized = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == '"' else '_', value)
-    sanitized = re.sub(r'\s+', ' ', sanitized).strip()
-    return sanitized
+    # Only normalize whitespace, keep all special characters
+    normalized = re.sub(r'\s+', ' ', value).strip()
+    return normalized
 
 
 def format_custom_filename(template: str, track, position: int = 1) -> str:
@@ -604,8 +604,8 @@ def create_m3u8_playlist(worker, check_only=False):
     if not (worker.is_album or worker.is_playlist):
         return False
     
-    # Sanitize playlist name
-    playlist_name = re.sub(r'[<>:"/\\|?*]', '_', worker.album_or_playlist_name.strip())
+    # Use playlist name as-is
+    playlist_name = worker.album_or_playlist_name.strip()
     playlist_filename = f"{playlist_name}.m3u8"
     playlist_path = os.path.join(worker.outpath, playlist_filename)
     
@@ -642,7 +642,7 @@ def create_m3u8_playlist(worker, check_only=False):
                 track_outpath = os.path.join(track_outpath, artist_folder)
             
             if worker.use_album_subfolders:
-                album_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", track.album)
+                album_folder = track.album
                 track_outpath = os.path.join(track_outpath, album_folder)
             
             # Use track's own track number, fallback to position in list
@@ -727,7 +727,7 @@ class DownloadWorker:
                 filename = f"{track.title}.flac"
             else:
                 filename = f"{track.title} - {track.artists}.flac"
-            return re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == '"' else '_', filename)
+            return filename
 
         return format_custom_filename(self.filename_format, track, position)
 
@@ -759,7 +759,7 @@ class DownloadWorker:
         else:
             artist_name = variations[0] if variations else track.artists
         
-        return re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", artist_name)
+        return artist_name
 
     def run(self):
         try:
@@ -799,7 +799,7 @@ class DownloadWorker:
                     track_outpath = os.path.join(track_outpath, artist_folder)
 
                 if self.use_album_subfolders:
-                    album_folder = re.sub(r'[<>:"/\\|?*]', lambda m: "'" if m.group() == "\"" else "_", track.album)
+                    album_folder = track.album
                     track_outpath = os.path.join(track_outpath, album_folder)
 
                 os.makedirs(track_outpath, exist_ok=True)
