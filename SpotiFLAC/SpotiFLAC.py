@@ -163,6 +163,9 @@ def check_isrc_in_artist_dirs(base_dir: str, artist_name: str, isrc: str) -> tup
         # Build pattern that matches directories containing all artist name words
         # Example: "DJ Shadow" matches "DJ Shadow", "dj_shadow", "DJ-Shadow", etc.
         # Use custom boundaries instead of \b to handle special characters
+        # Pattern that matches dots, hyphens, and underscores interchangeably
+        SEPARATOR_PATTERN = r'[.\-_]'
+        
         pattern_parts = []
         for word in artist_words:
             # Normalize the word
@@ -175,7 +178,7 @@ def check_isrc_in_artist_dirs(base_dir: str, artist_name: str, isrc: str) -> tup
             for char in word:
                 if char in '.-_':
                     # Any of these characters can match each other
-                    flexible_word += r'[\.\-_]'
+                    flexible_word += SEPARATOR_PATTERN
                 else:
                     # Regular character - escape it for regex
                     flexible_word += re.escape(char)
@@ -183,7 +186,7 @@ def check_isrc_in_artist_dirs(base_dir: str, artist_name: str, isrc: str) -> tup
             # Use custom boundaries that handle special characters
             # - Start of string or whitespace/underscore/hyphen/dot before word
             # - End of string or whitespace/underscore/hyphen/dot after word
-            pattern_parts.append(f"(?=.*(?:^|[\\s_\\-\\.]){flexible_word}(?:[\\s_\\-\\.]|$))")
+            pattern_parts.append(f"(?=.*(?:^|[\\s._-]){flexible_word}(?:[\\s._-]|$))")
         
         # Combine into a single pattern (case-insensitive, matches all words in any order)
         pattern = "".join(pattern_parts)
