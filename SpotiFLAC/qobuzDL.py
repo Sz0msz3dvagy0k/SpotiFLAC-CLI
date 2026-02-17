@@ -13,8 +13,8 @@ from mutagen.id3 import PictureType
 def _sanitize_filename(value: str, fallback: str = "Unknown") -> str:
     if not value:
         return fallback
-    cleaned = re.sub(r'[\\/*?:"<>|]', "", value)
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    # Only normalize whitespace, keep all special characters
+    cleaned = re.sub(r"\s+", " ", value).strip()
     return cleaned or fallback
 
 
