@@ -206,9 +206,10 @@ class ProgressCallback:
 
 
 class TidalDownloader:
-    def __init__(self, api_url: Optional[str] = None, timeout: float = 5.0, max_retries: int = 3):
+    def __init__(self, api_url: Optional[str] = None, timeout: float = 5.0, max_retries: int = 3, check_only: bool = False):
         self.timeout = timeout
         self.max_retries = max_retries
+        self.check_only = check_only
         self.progress_callback: Callable[[int, int], None] = ProgressCallback()
         self.client_id = base64.b64decode("NkJEU1JkcEs5aHFFQlRnVQ==").decode()
         self.client_secret = base64.b64decode("eGV1UG1ZN25icFo5SUliTEFjUTkzc2hrYTFWTmhlVUFxTjZJY3N6alRHOD0=").decode()
@@ -334,6 +335,16 @@ class TidalDownloader:
                         f"{track.get('title','?')} (ISRC: {spotify_isrc})"
                     )
                     return track
+            
+            # ISRC mismatch - show interactive menu only if not in check_only mode
+            if not self.check_only:
+                try:
+                    return self._interactive_track_selection(all_tracks, spotify_isrc)
+                except KeyboardInterrupt:
+                    # User pressed Ctrl+C or chose to quit
+                    raise Exception(f"ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
+            
+            # In check_only mode or if interactive selection is skipped
             raise Exception(f"ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
 
         best_match: Optional[Dict] = None
@@ -360,6 +371,165 @@ class TidalDownloader:
                 best_match = track
                 break
         return best_match
+
+    def _format_duration(self, duration_seconds: int) -> str:
+        """
+        Format duration from seconds to MM:SS format.
+        
+        Args:
+            duration_seconds: Duration in seconds
+            
+        Returns:
+            Formatted duration string (e.g., "3:45")
+        """
+        if not duration_seconds:
+            return "0:00"
+        minutes = duration_seconds // 60
+        seconds = duration_seconds % 60
+        return f"{minutes}:{seconds:02d}"
+
+    def _display_track_info(self, track: Dict, index: int) -> None:
+        """
+        Display formatted track information for selection menu.
+        
+        Args:
+            track: Track dictionary from Tidal
+            index: Display index (1-5)
+        """
+        artists = []
+        if track.get("artists"):
+            artists = [a.get("name") for a in track["artists"] if a.get("name")]
+        elif track.get("artist", {}).get("name"):
+            artists = [track["artist"]["name"]]
+        artist_name = ", ".join(artists) or "Unknown Artist"
+        
+        title = track.get("title") or "Unknown Title"
+        isrc = track.get("isrc") or "No ISRC"
+        duration = track.get("duration") or 0
+        duration_str = self._format_duration(duration)
+        
+        print(f"\n{index}. {artist_name} - {title}")
+        print(f"   ISRC: {isrc}")
+        print(f"   Duration: {duration_str}")
+
+    def _interactive_track_selection(self, all_tracks: List[Dict], spotify_isrc: str) -> Dict:
+        """
+        Display an interactive menu for track selection when ISRC mismatch occurs.
+        
+        Args:
+            all_tracks: List of track dictionaries from Tidal search
+            spotify_isrc: The original Spotify ISRC that failed to match
+            
+        Returns:
+            Selected track dictionary
+            
+        Raises:
+            Exception: If user chooses to skip or quit
+        """
+        print(f"\n[X] tidal failed: ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
+        
+        # Display up to 5 tracks
+        display_tracks = all_tracks[:5]
+        print(f"\nFound {len(display_tracks)} similar tracks. Please select one:")
+        
+        for i, track in enumerate(display_tracks, start=1):
+            self._display_track_info(track, i)
+        
+        while True:
+            try:
+                print("\nEnter choice (1-5), 'm' for manual ISRC, 's' to skip, 'q' to quit: ", end="")
+                choice = input().strip().lower()
+                
+                if choice in ('q', 'quit'):
+                    print("Quitting...")
+                    raise KeyboardInterrupt("User requested quit")
+                
+                if choice in ('s', 'skip'):
+                    print("Skipping track.")
+                    raise Exception(f"ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
+                
+                if choice in ('m', 'manual'):
+                    return self._manual_isrc_entry(all_tracks)
+                
+                # Try to parse as a number
+                try:
+                    track_num = int(choice)
+                    if 1 <= track_num <= len(display_tracks):
+                        selected_track = display_tracks[track_num - 1]
+                        artist_name = ", ".join([a.get("name", "") for a in selected_track.get("artists", [])]) or "Unknown"
+                        title = selected_track.get("title", "Unknown")
+                        isrc = selected_track.get("isrc", "No ISRC")
+                        print(f"Using: {artist_name} - {title} [ISRC: {isrc}]")
+                        return selected_track
+                    else:
+                        print(f"Invalid choice. Please enter a number between 1 and {len(display_tracks)}.")
+                except ValueError:
+                    print("Invalid input. Please enter a number (1-5), 'm', 's', or 'q'.")
+            
+            except KeyboardInterrupt:
+                print("\nSkipping track.")
+                raise Exception(f"ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
+
+    def _manual_isrc_entry(self, all_tracks: List[Dict]) -> Dict:
+        """
+        Handle manual ISRC entry by the user.
+        
+        Args:
+            all_tracks: List of all tracks from search to check against
+            
+        Returns:
+            Track matching the manually entered ISRC
+            
+        Raises:
+            Exception: If no track found with the entered ISRC
+        """
+        while True:
+            try:
+                print("Enter ISRC code: ", end="")
+                manual_isrc = input().strip().upper()
+                
+                if not manual_isrc:
+                    print("ISRC cannot be empty. Please try again.")
+                    continue
+                
+                print(f"Searching for ISRC: {manual_isrc}")
+                
+                # First, check in the already fetched tracks
+                for track in all_tracks:
+                    if track.get("isrc") == manual_isrc:
+                        artist_name = ", ".join([a.get("name", "") for a in track.get("artists", [])]) or "Unknown"
+                        title = track.get("title", "Unknown")
+                        print(f"Found track: {artist_name} - {title}")
+                        return track
+                
+                # If not found in existing tracks, search Tidal for that ISRC
+                try:
+                    result = self.search_tracks_with_limit(manual_isrc, 50)
+                    items = result.get("items", [])
+                    
+                    for track in items:
+                        if track.get("isrc") == manual_isrc:
+                            artist_name = ", ".join([a.get("name", "") for a in track.get("artists", [])]) or "Unknown"
+                            title = track.get("title", "Unknown")
+                            print(f"Found track: {artist_name} - {title}")
+                            return track
+                    
+                    print(f"No track found with ISRC {manual_isrc} on Tidal.")
+                    print("Would you like to try another ISRC? (y/n): ", end="")
+                    retry = input().strip().lower()
+                    if retry not in ('y', 'yes'):
+                        raise Exception(f"No track found with manually entered ISRC {manual_isrc}")
+                
+                except Exception as e:
+                    print(f"Error searching for ISRC: {e}")
+                    print("Would you like to try another ISRC? (y/n): ", end="")
+                    retry = input().strip().lower()
+                    if retry not in ('y', 'yes'):
+                        raise Exception(f"Failed to find track with ISRC {manual_isrc}")
+            
+            except KeyboardInterrupt:
+                print("\nCancelled manual ISRC entry.")
+                raise Exception("Manual ISRC entry cancelled by user")
 
     def get_tidal_url_from_spotify(self, spotify_track_id: str) -> str:
         spotify_base = base64.b64decode("aHR0cHM6Ly9vcGVuLnNwb3RpZnkuY29tL3RyYWNrLw==").decode()

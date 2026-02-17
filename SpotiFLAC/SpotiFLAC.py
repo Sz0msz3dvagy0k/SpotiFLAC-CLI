@@ -848,7 +848,7 @@ class DownloadWorker:
                     update_progress(f"Trying service: {svc}")
 
                     if svc == "tidal":
-                        downloader = TidalDownloader()
+                        downloader = TidalDownloader(check_only=self.check_only)
                     elif svc == "deezer":
                         downloader = DeezerDownloader()
                     elif svc == "qobuz":
@@ -856,7 +856,7 @@ class DownloadWorker:
                     elif svc == "amazon":
                         downloader = AmazonDownloader()
                     else:
-                        downloader = TidalDownloader()
+                        downloader = TidalDownloader(check_only=self.check_only)
 
                     downloader.set_progress_callback(progress_update)
 
