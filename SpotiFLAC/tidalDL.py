@@ -48,6 +48,60 @@ def _sanitize_filename(value: str, fallback: str = "Unknown") -> str:
     return cleaned or fallback
 
 
+def _calculate_title_similarity(query_title: str, track_title: str) -> float:
+    """
+    Calculate similarity score between query title and track title.
+    Returns a score between 0.0 (no match) and 1.0 (perfect match).
+    
+    Args:
+        query_title: The title being searched for
+        track_title: The track title from search results
+        
+    Returns:
+        Similarity score (0.0 to 1.0)
+    """
+    if not query_title or not track_title:
+        return 0.0
+    
+    # Normalize both titles for comparison
+    def normalize(text: str) -> str:
+        # Convert to lowercase
+        text = text.lower()
+        # Remove common separators and normalize whitespace
+        text = re.sub(r'[_\-\.\(\)\[\]]', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+    
+    query_norm = normalize(query_title)
+    track_norm = normalize(track_title)
+    
+    # Exact match after normalization
+    if query_norm == track_norm:
+        return 1.0
+    
+    # Check if one contains the other (handles subtitles like "japanese ver.")
+    if query_norm in track_norm:
+        # Query is substring of track - good match
+        # Score based on length ratio to prefer closer matches
+        return 0.9 * (len(query_norm) / len(track_norm))
+    elif track_norm in query_norm:
+        # Track is substring of query - also good
+        return 0.85 * (len(track_norm) / len(query_norm))
+    
+    # Calculate word-based similarity
+    query_words = set(query_norm.split())
+    track_words = set(track_norm.split())
+    
+    if not query_words or not track_words:
+        return 0.0
+    
+    # Jaccard similarity (intersection over union)
+    intersection = query_words & track_words
+    union = query_words | track_words
+    
+    return len(intersection) / len(union) if union else 0.0
+
+
 def _build_tidal_filename(
     title: str,
     artist: str,
@@ -441,13 +495,38 @@ class TidalDownloader:
                 duration = track.get("duration") or 0
                 if abs(duration - expected_duration) <= tolerance:
                     matches.append(track)
+            
             if matches:
-                best_match = matches[0]
-                for track in matches:
-                    tags = (track.get("mediaMetadata") or {}).get("tags") or []
-                    if "HIRES_LOSSLESS" in tags:
-                        best_match = track
-                        break
+                # If multiple tracks match by duration, use title similarity scoring
+                if len(matches) > 1:
+                    print(f"Found {len(matches)} tracks with matching duration. Using title similarity...")
+                    best_score = 0.0
+                    best_match = matches[0]
+                    
+                    for track in matches:
+                        track_title = track.get("title", "")
+                        similarity = _calculate_title_similarity(track_name, track_title)
+                        
+                        # Bonus for HIRES_LOSSLESS quality
+                        tags = (track.get("mediaMetadata") or {}).get("tags") or []
+                        quality_bonus = 0.05 if "HIRES_LOSSLESS" in tags else 0.0
+                        
+                        total_score = similarity + quality_bonus
+                        
+                        if total_score > best_score:
+                            best_score = total_score
+                            best_match = track
+                    
+                    print(f"Best match: '{best_match.get('title', '?')}' (similarity: {best_score:.2f})")
+                else:
+                    # Only one match - use it (with quality preference)
+                    best_match = matches[0]
+                    for track in matches:
+                        tags = (track.get("mediaMetadata") or {}).get("tags") or []
+                        if "HIRES_LOSSLESS" in tags:
+                            best_match = track
+                            break
+                
                 # If we found a duration match and had ISRC mismatch, log it but use the match
                 if spotify_isrc and best_match:
                     print(
