@@ -341,7 +341,7 @@ class TidalDownloader:
                 try:
                     return self._interactive_track_selection(all_tracks, spotify_isrc)
                 except KeyboardInterrupt:
-                    # User pressed Ctrl+C or chose to quit
+                    # User cancelled the interactive selection (Ctrl+C or quit option)
                     raise Exception(f"Track selection cancelled by user")
             
             # In check_only mode or if interactive selection is skipped
@@ -441,19 +441,20 @@ class TidalDownloader:
         
         # Display up to 5 tracks
         display_tracks = all_tracks[:5]
-        print(f"\nFound {len(display_tracks)} similar tracks. Please select one:")
+        num_tracks = len(display_tracks)
+        print(f"\nFound {num_tracks} similar tracks. Please select one:")
         
         for i, track in enumerate(display_tracks, start=1):
             self._display_track_info(track, i)
         
         while True:
             try:
-                print("\nEnter choice (1-5), 'm' for manual ISRC, 's' to skip, 'q' to quit: ", end="")
+                print(f"\nEnter choice (1-{num_tracks}), 'm' for manual ISRC, 's' to skip, 'q' to quit: ", end="")
                 choice = input().strip().lower()
                 
                 if choice in ('q', 'quit'):
                     print("Quitting...")
-                    raise KeyboardInterrupt("User requested quit")
+                    raise KeyboardInterrupt()
                 
                 if choice in ('s', 'skip'):
                     print("Skipping track.")
@@ -465,7 +466,7 @@ class TidalDownloader:
                 # Try to parse as a number
                 try:
                     track_num = int(choice)
-                    if 1 <= track_num <= len(display_tracks):
+                    if 1 <= track_num <= num_tracks:
                         selected_track = display_tracks[track_num - 1]
                         artist_name = self._get_artist_name(selected_track)
                         title = selected_track.get("title", "Unknown")
@@ -473,9 +474,9 @@ class TidalDownloader:
                         print(f"Using: {artist_name} - {title} [ISRC: {isrc}]")
                         return selected_track
                     else:
-                        print(f"Invalid choice. Please enter a number between 1 and {len(display_tracks)}.")
+                        print(f"Invalid choice. Please enter a number between 1 and {num_tracks}.")
                 except ValueError:
-                    print("Invalid input. Please enter a number (1-5), 'm', 's', or 'q'.")
+                    print(f"Invalid input. Please enter a number (1-{num_tracks}), 'm', 's', or 'q'.")
             
             except KeyboardInterrupt:
                 # User pressed Ctrl+C - let it propagate up to be caught by the outer handler
