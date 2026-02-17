@@ -342,7 +342,7 @@ class TidalDownloader:
                     return self._interactive_track_selection(all_tracks, spotify_isrc)
                 except KeyboardInterrupt:
                     # User cancelled the interactive selection (Ctrl+C or quit option)
-                    raise Exception(f"Track selection cancelled by user")
+                    raise Exception(f"Track selection cancelled by user (quit or Ctrl+C)")
             
             # In check_only mode or if interactive selection is skipped
             raise Exception(f"ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
@@ -411,7 +411,7 @@ class TidalDownloader:
         
         Args:
             track: Track dictionary from Tidal
-            index: Display index (1-5)
+            index: Display index (1-N based on available tracks)
         """
         artist_name = self._get_artist_name(track)
         title = track.get("title") or "Unknown Title"
