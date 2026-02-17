@@ -342,7 +342,7 @@ class TidalDownloader:
                     return self._interactive_track_selection(all_tracks, spotify_isrc)
                 except KeyboardInterrupt:
                     # User pressed Ctrl+C or chose to quit
-                    raise Exception(f"ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
+                    raise Exception(f"Track selection cancelled by user")
             
             # In check_only mode or if interactive selection is skipped
             raise Exception(f"ISRC mismatch: no track found with ISRC {spotify_isrc} on Tidal")
@@ -388,6 +388,23 @@ class TidalDownloader:
         seconds = duration_seconds % 60
         return f"{minutes}:{seconds:02d}"
 
+    def _get_artist_name(self, track: Dict) -> str:
+        """
+        Extract artist name from track dictionary.
+        
+        Args:
+            track: Track dictionary from Tidal
+            
+        Returns:
+            Formatted artist name string
+        """
+        artists = []
+        if track.get("artists"):
+            artists = [a.get("name") for a in track["artists"] if a.get("name")]
+        elif track.get("artist", {}).get("name"):
+            artists = [track["artist"]["name"]]
+        return ", ".join(artists) or "Unknown Artist"
+
     def _display_track_info(self, track: Dict, index: int) -> None:
         """
         Display formatted track information for selection menu.
@@ -396,13 +413,7 @@ class TidalDownloader:
             track: Track dictionary from Tidal
             index: Display index (1-5)
         """
-        artists = []
-        if track.get("artists"):
-            artists = [a.get("name") for a in track["artists"] if a.get("name")]
-        elif track.get("artist", {}).get("name"):
-            artists = [track["artist"]["name"]]
-        artist_name = ", ".join(artists) or "Unknown Artist"
-        
+        artist_name = self._get_artist_name(track)
         title = track.get("title") or "Unknown Title"
         isrc = track.get("isrc") or "No ISRC"
         duration = track.get("duration") or 0
@@ -456,7 +467,7 @@ class TidalDownloader:
                     track_num = int(choice)
                     if 1 <= track_num <= len(display_tracks):
                         selected_track = display_tracks[track_num - 1]
-                        artist_name = ", ".join([a.get("name", "") for a in selected_track.get("artists", [])]) or "Unknown"
+                        artist_name = self._get_artist_name(selected_track)
                         title = selected_track.get("title", "Unknown")
                         isrc = selected_track.get("isrc", "No ISRC")
                         print(f"Using: {artist_name} - {title} [ISRC: {isrc}]")
@@ -498,19 +509,19 @@ class TidalDownloader:
                 # First, check in the already fetched tracks
                 for track in all_tracks:
                     if track.get("isrc") == manual_isrc:
-                        artist_name = ", ".join([a.get("name", "") for a in track.get("artists", [])]) or "Unknown"
+                        artist_name = self._get_artist_name(track)
                         title = track.get("title", "Unknown")
                         print(f"Found track: {artist_name} - {title}")
                         return track
                 
                 # If not found in existing tracks, search Tidal for that ISRC
                 try:
-                    result = self.search_tracks_with_limit(manual_isrc, 50)
+                    result = self.search_tracks_with_limit(manual_isrc, 100)
                     items = result.get("items", [])
                     
                     for track in items:
                         if track.get("isrc") == manual_isrc:
-                            artist_name = ", ".join([a.get("name", "") for a in track.get("artists", [])]) or "Unknown"
+                            artist_name = self._get_artist_name(track)
                             title = track.get("title", "Unknown")
                             print(f"Found track: {artist_name} - {title}")
                             return track
