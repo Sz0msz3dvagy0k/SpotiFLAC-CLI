@@ -80,7 +80,16 @@ def extract_artist_variations(artist_name: str) -> list[str]:
         artist_name: Full artist string from track metadata
         
     Returns:
-        List of artist name variations to try matching
+        List of artist name variations to try matching, ordered as follows:
+        [0] Full artist string (always present)
+        [1] If parentheses exist: content inside parentheses
+            Otherwise: first artist from comma/separator split
+        [2+] Additional variations (before-paren content, remaining artists, etc.)
+        
+        Examples:
+        - "Olly Alexander (Years & Years)" -> ["Olly Alexander (Years & Years)", "Years & Years", "Olly Alexander"]
+        - "League of Legends Music, TEYA" -> ["League of Legends Music, TEYA", "League of Legends Music", "TEYA"]
+        - "R.A.D." -> ["R.A.D."]
     """
     variations = []
     
@@ -90,21 +99,24 @@ def extract_artist_variations(artist_name: str) -> list[str]:
     # Normalize the string first
     artist_name = normalize_string(artist_name)
     
-    # Always include the full artist name
+    # Always include the full artist name at index 0
     variations.append(artist_name)
     
     # Extract content in parentheses (e.g., "Years & Years" from "Olly Alexander (Years & Years)")
+    # This is intentionally checked first so parenthetical content gets index 1
     parenthetical_match = re.search(r'\(([^)]+)\)', artist_name)
     if parenthetical_match:
         parenthetical_content = parenthetical_match.group(1).strip()
         if parenthetical_content:
-            variations.append(parenthetical_content)
-        # Also add the part before parentheses
+            variations.append(parenthetical_content)  # Index 1 for parenthetical format
+        # Add the part before parentheses at a later index
+        # (e.g., "Olly Alexander" becomes index 2)
         before_paren = artist_name[:parenthetical_match.start()].strip()
         if before_paren:
             variations.append(before_paren)
     
     # Split by common separators and add individual artists
+    # If no parentheses were found, the first split artist becomes index 1
     for separator in [", ", " feat. ", " ft. ", " featuring ", " & ", " and "]:
         if separator in artist_name:
             parts = artist_name.split(separator)
@@ -733,20 +745,14 @@ class DownloadWorker:
         if not track.artists or not isinstance(track.artists, str):
             return "Unknown Artist"
         
-        # Get artist variations and use the most appropriate one
+        # Get artist variations from extract_artist_variations()
+        # See that function's docstring for detailed ordering explanation
         variations = extract_artist_variations(track.artists)
         
-        # The extract_artist_variations() returns variations in this order:
-        # [0] Full artist string (e.g., "League of Legends Music, TEYA")
-        # [1] Second element varies based on format:
-        #     - For comma-separated: First artist (e.g., "League of Legends Music")
-        #     - For parenthetical: Content in parentheses (e.g., "Years & Years" from "Olly Alexander (Years & Years)")
-        # [2+] Additional variations
-        #
-        # For folder naming, we use variations[1] when available, which gives us:
-        # - "League of Legends Music, TEYA" -> "League of Legends Music" (first artist)
-        # - "Olly Alexander (Years & Years)" -> "Years & Years" (band name from parentheses)
-        # - "R.A.D." -> "R.A.D." (only one variation, uses variations[0])
+        # Use variations[1] when available, which provides the most appropriate folder name:
+        # - For "Olly Alexander (Years & Years)" -> "Years & Years" (parenthetical content)
+        # - For "League of Legends Music, TEYA" -> "League of Legends Music" (first artist)
+        # - For "R.A.D." -> "R.A.D." (only variations[0] exists, use that)
         if len(variations) > 1:
             artist_name = variations[1]
         else:
