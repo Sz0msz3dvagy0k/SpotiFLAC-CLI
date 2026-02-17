@@ -291,10 +291,16 @@ class TidalDownloader:
         headers = {"Authorization": f"Bearer {token}"}
         
         # Strategy 1: Try direct ISRC endpoint (pattern from other music APIs)
+        # Common patterns used by music streaming services for ISRC lookup
+        tracks_base = "https://api.tidal.com/v1/tracks"
+        isrc_endpoint_patterns = [
+            f"{tracks_base}/isrc:{isrc}",      # Pattern 1: /tracks/isrc:{code}
+            f"{tracks_base}/byIsrc/{isrc}",    # Pattern 2: /tracks/byIsrc/{code}
+            f"{tracks_base}?isrc={isrc}"       # Pattern 3: /tracks?isrc={code}
+        ]
+        
         try:
-            # Try /v1/tracks endpoint with ISRC parameter
-            tracks_base = "https://api.tidal.com/v1/tracks"
-            for endpoint_pattern in [f"{tracks_base}/isrc:{isrc}", f"{tracks_base}/byIsrc/{isrc}", f"{tracks_base}?isrc={isrc}"]:
+            for endpoint_pattern in isrc_endpoint_patterns:
                 try:
                     resp = requests.get(endpoint_pattern, headers=headers, timeout=self.timeout)
                     if resp.status_code == 200:
@@ -308,7 +314,9 @@ class TidalDownloader:
                             if items:
                                 print(f"✓ Found {len(items)} track(s) via direct ISRC endpoint")
                                 return items[0]
-                except Exception:
+                except Exception as e:
+                    # Log specific endpoint failures for debugging
+                    print(f"Endpoint {endpoint_pattern} failed: {type(e).__name__}")
                     continue
         except Exception as e:
             print(f"Direct ISRC endpoint search failed: {e}")
@@ -324,7 +332,9 @@ class TidalDownloader:
                         if track.get("isrc") == isrc:
                             print(f"✓ Found track via ISRC text search: {track.get('title', '?')}")
                             return track
-                except Exception:
+                except Exception as e:
+                    # Log specific search failures for debugging
+                    print(f"Text search '{query_format}' failed: {type(e).__name__}: {str(e)}")
                     continue
         except Exception as e:
             print(f"ISRC text search failed: {e}")
