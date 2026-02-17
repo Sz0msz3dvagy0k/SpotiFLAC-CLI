@@ -165,7 +165,7 @@ def check_isrc_in_artist_dirs(base_dir: str, artist_name: str, isrc: str) -> tup
             # Build a flexible pattern character by character
             flexible_word = ""
             for char in word:
-                if char in '.\\-_':
+                if char in '.-_':
                     # Any of these characters can match each other
                     flexible_word += r'[\.\-_]'
                 else:
@@ -736,13 +736,18 @@ class DownloadWorker:
         # Get artist variations and use the most appropriate one
         variations = extract_artist_variations(track.artists)
         
-        # Prefer: 1) Primary artist (first in list after full name), 
-        #         2) Parenthetical content if it exists
-        #         3) Full artist string
+        # The extract_artist_variations() returns variations in this order:
+        # [0] Full artist string (e.g., "League of Legends Music, TEYA")
+        # [1] Second element varies based on format:
+        #     - For comma-separated: First artist (e.g., "League of Legends Music")
+        #     - For parenthetical: Content in parentheses (e.g., "Years & Years" from "Olly Alexander (Years & Years)")
+        # [2+] Additional variations
+        #
+        # For folder naming, we use variations[1] when available, which gives us:
+        # - "League of Legends Music, TEYA" -> "League of Legends Music" (first artist)
+        # - "Olly Alexander (Years & Years)" -> "Years & Years" (band name from parentheses)
+        # - "R.A.D." -> "R.A.D." (only one variation, uses variations[0])
         if len(variations) > 1:
-            # If we have variations, use the first non-full-string variation
-            # This handles cases like "League of Legends Music, TEYA" -> "TEYA"
-            # and "Olly Alexander (Years & Years)" -> "Olly Alexander"
             artist_name = variations[1]
         else:
             artist_name = variations[0] if variations else track.artists
