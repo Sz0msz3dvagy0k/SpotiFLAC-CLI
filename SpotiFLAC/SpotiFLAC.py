@@ -870,7 +870,8 @@ class DownloadWorker:
                             )
 
                             result = downloader.download(
-                                query=f"{track.title} {track.artists}",
+                                query=track.title,
+                                artist_name=track.artists,
                                 isrc=track.isrc,
                                 output_dir=track_outpath,
                                 quality="LOSSLESS",

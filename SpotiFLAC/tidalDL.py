@@ -760,6 +760,7 @@ class TidalDownloader:
     def download(
         self,
         query: str,
+        artist_name: str = "",
         isrc: Optional[str] = None,
         output_dir: str = ".",
         quality: str = "LOSSLESS",
@@ -774,7 +775,7 @@ class TidalDownloader:
         os.makedirs(output_dir, exist_ok=True)
 
         try:
-            track_info = self.search_track_by_metadata_with_isrc(query, "", isrc or "", 0)
+            track_info = self.search_track_by_metadata_with_isrc(query, artist_name, isrc or "", 0)
         except Exception as exc:
             raise Exception(f"Error getting track info: {exc}")
 
