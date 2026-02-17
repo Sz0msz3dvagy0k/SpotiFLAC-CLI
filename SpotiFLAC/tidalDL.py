@@ -273,6 +273,65 @@ class TidalDownloader:
     def search_tracks(self, query: str) -> Dict:
         return self.search_tracks_with_limit(query, 50)
 
+    def search_by_isrc(self, isrc: str) -> Optional[Dict]:
+        """
+        Search for a track by ISRC code using multiple strategies.
+        
+        Args:
+            isrc: The ISRC code to search for
+            
+        Returns:
+            Track dictionary if found, None otherwise
+        """
+        token = self.get_access_token()
+        if not token:
+            print("Failed to get access token for ISRC search")
+            return None
+        
+        headers = {"Authorization": f"Bearer {token}"}
+        
+        # Strategy 1: Try direct ISRC endpoint (pattern from other music APIs)
+        try:
+            # Try /v1/tracks endpoint with ISRC parameter
+            tracks_base = "https://api.tidal.com/v1/tracks"
+            for endpoint_pattern in [f"{tracks_base}/isrc:{isrc}", f"{tracks_base}/byIsrc/{isrc}", f"{tracks_base}?isrc={isrc}"]:
+                try:
+                    resp = requests.get(endpoint_pattern, headers=headers, timeout=self.timeout)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        # Check if we got a single track or a list
+                        if isinstance(data, dict) and data.get("id"):
+                            print(f"✓ Found track via direct ISRC endpoint: {data.get('title', '?')}")
+                            return data
+                        elif isinstance(data, dict) and data.get("items"):
+                            items = data["items"]
+                            if items:
+                                print(f"✓ Found {len(items)} track(s) via direct ISRC endpoint")
+                                return items[0]
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"Direct ISRC endpoint search failed: {e}")
+        
+        # Strategy 2: Try text search with ISRC prefix (like Qobuz pattern)
+        try:
+            for query_format in [f"isrc:{isrc}", isrc]:
+                try:
+                    result = self.search_tracks_with_limit(query_format, 100)
+                    items = result.get("items", [])
+                    # Look for exact ISRC match in results
+                    for track in items:
+                        if track.get("isrc") == isrc:
+                            print(f"✓ Found track via ISRC text search: {track.get('title', '?')}")
+                            return track
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"ISRC text search failed: {e}")
+        
+        print(f"No track found with ISRC {isrc} after trying all search strategies")
+        return None
+
     def _collect_search_queries(self, track_name: str, artist_name: str) -> List[str]:
         queries: List[str] = []
         if artist_name and track_name:
@@ -310,6 +369,19 @@ class TidalDownloader:
     def search_track_by_metadata_with_isrc(
         self, track_name: str, artist_name: str, spotify_isrc: str, expected_duration: int
     ) -> Dict:
+        # Strategy 1: If ISRC is provided, try direct ISRC search first
+        if spotify_isrc:
+            print(f"Attempting direct ISRC search for: {spotify_isrc}")
+            isrc_track = self.search_by_isrc(spotify_isrc)
+            if isrc_track:
+                print(
+                    f"✓ ISRC match found: {isrc_track.get('artist', {}).get('name','?')} - "
+                    f"{isrc_track.get('title','?')} (ISRC: {spotify_isrc})"
+                )
+                return isrc_track
+            print(f"Direct ISRC search failed for {spotify_isrc}, falling back to text search")
+        
+        # Strategy 2: Fall back to text-based search
         queries = self._collect_search_queries(track_name, artist_name)
         all_tracks: List[Dict] = []
         for query in queries:
@@ -326,12 +398,13 @@ class TidalDownloader:
         if not all_tracks:
             raise Exception("no tracks found for any search query")
 
+        # Check if any text search results match the ISRC
         if spotify_isrc:
-            print(f"Looking for ISRC match: {spotify_isrc}")
+            print(f"Looking for ISRC match in text search results: {spotify_isrc}")
             for track in all_tracks:
                 if track.get("isrc") == spotify_isrc:
                     print(
-                        f"✓ ISRC match found: {track.get('artist', {}).get('name','?')} - "
+                        f"✓ ISRC match found in text results: {track.get('artist', {}).get('name','?')} - "
                         f"{track.get('title','?')} (ISRC: {spotify_isrc})"
                     )
                     return track
@@ -515,17 +588,14 @@ class TidalDownloader:
                         print(f"Found track: {artist_name} - {title}")
                         return track
                 
-                # If not found in existing tracks, search Tidal for that ISRC
+                # If not found in existing tracks, use direct ISRC search
                 try:
-                    result = self.search_tracks_with_limit(manual_isrc, 100)
-                    items = result.get("items", [])
-                    
-                    for track in items:
-                        if track.get("isrc") == manual_isrc:
-                            artist_name = self._get_artist_name(track)
-                            title = track.get("title", "Unknown")
-                            print(f"Found track: {artist_name} - {title}")
-                            return track
+                    track = self.search_by_isrc(manual_isrc)
+                    if track:
+                        artist_name = self._get_artist_name(track)
+                        title = track.get("title", "Unknown")
+                        print(f"Found track: {artist_name} - {title}")
+                        return track
                     
                     print(f"No track found with ISRC {manual_isrc} on Tidal.")
                     print("Would you like to try another ISRC? (y/n): ", end="")
