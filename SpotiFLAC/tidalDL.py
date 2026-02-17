@@ -314,18 +314,23 @@ class TidalDownloader:
                             if items:
                                 print(f"✓ Found {len(items)} track(s) via direct ISRC endpoint")
                                 return items[0]
+                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                    # Network errors - log separately as they indicate connectivity issues
+                    print(f"Network error for endpoint: {type(e).__name__}")
+                    continue
                 except Exception as e:
-                    # Log specific endpoint failures for debugging
-                    print(f"Endpoint {endpoint_pattern} failed: {type(e).__name__}")
+                    # Other errors (likely 404 or invalid endpoint) - less verbose logging
+                    print(f"Endpoint pattern failed: {type(e).__name__}")
                     continue
         except Exception as e:
             print(f"Direct ISRC endpoint search failed: {e}")
         
         # Strategy 2: Try text search with ISRC prefix (like Qobuz pattern)
+        # Use smaller limit (20) since ISRC is unique and we only need to find one match
         try:
             for query_format in [f"isrc:{isrc}", isrc]:
                 try:
-                    result = self.search_tracks_with_limit(query_format, 100)
+                    result = self.search_tracks_with_limit(query_format, 20)
                     items = result.get("items", [])
                     # Look for exact ISRC match in results
                     for track in items:
@@ -334,7 +339,7 @@ class TidalDownloader:
                             return track
                 except Exception as e:
                     # Log specific search failures for debugging
-                    print(f"Text search '{query_format}' failed: {type(e).__name__}: {str(e)}")
+                    print(f"Text search query failed: {type(e).__name__}")
                     continue
         except Exception as e:
             print(f"ISRC text search failed: {e}")
